@@ -1,0 +1,5 @@
+{
+  "name": "CyberSense: Emotion-Aware CTI",
+  "description": "A platform for emotion-aware sentiment analysis in Cyber Threat Intelligence, featuring dataset exploration and threat categorization.",
+  "requestFramePermissions": []
+}

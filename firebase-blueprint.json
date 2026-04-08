@@ -1,0 +1,62 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "User profile and role information",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string", "format": "email" },
+        "displayName": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "analyst", "user"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role"]
+    },
+    "IntelligenceReport": {
+      "title": "Intelligence Report",
+      "description": "Analyzed CTI reports and findings",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "authorUid": { "type": "string" },
+        "content": { "type": "string" },
+        "sentiment": { "type": "string" },
+        "dominantEmotion": { "type": "string" },
+        "aiInsights": { "type": "object" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["authorUid", "content", "createdAt"]
+    },
+    "DatasetUpload": {
+      "title": "Dataset Upload",
+      "description": "Metadata for uploaded CTI datasets",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "uploaderUid": { "type": "string" },
+        "fileName": { "type": "string" },
+        "fileType": { "type": "string" },
+        "fileSize": { "type": "number" },
+        "recordCount": { "type": "number" },
+        "status": { "type": "string", "enum": ["pending", "processing", "completed", "failed"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uploaderUid", "fileName", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "users/{userId}": {
+      "schema": "User",
+      "description": "User profile documents"
+    },
+    "reports/{reportId}": {
+      "schema": "IntelligenceReport",
+      "description": "Stored CTI analysis reports"
+    },
+    "uploads/{uploadId}": {
+      "schema": "DatasetUpload",
+      "description": "Tracking for uploaded dataset files"
+    }
+  }
+}
