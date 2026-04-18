@@ -1,0 +1,1426 @@
+1:import React, { useState, useMemo, useEffect } from 'react';
+2:import { 
+46:import { 
+67:import { GoogleGenAI, Type } from "@google/genai";
+68:import { motion, AnimatePresence } from 'motion/react';
+69:import { clsx, type ClassValue } from 'clsx';
+70:import { twMerge } from 'tailwind-merge';
+73:import { initializeApp as initFirebase } from 'firebase/app';
+74:import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
+75:import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
+77:const firebaseConfig = {
+93:function cn(...inputs: ClassValue[]) {
+104:const SENTIMENT_LEXICON: Record<string, number> = {
+110:function cleanText(text: string): string {
+114:function analyzeTweet(text: string) {
+120:  words.forEach(word => {
+121:    if (SENTIMENT_LEXICON[word] !== undefined) {
+131:  return { polarity: parseFloat(polarity.toFixed(3)), subjectivity: parseFloat(subjectivity.toFixed(3)), sentiment, isCyberRelevant, frequentMarkers: words.filter(w => SENTIMENT_LEXICON[w] !== undefined) };
+134:function getFrequentMarkers(tweets: string[], minSupport = 0.01) {
+135:  const counts: Record<string, number> = {};
+136:  tweets.forEach(t => {
+138:    words.forEach(w => { counts[w] = (counts[w] || 0) + 1; });
+140:  return Object.entries(counts).map(([word, count]) => ({ word, count, support: count / tweets.length })).filter(m => m.support >= minSupport).sort((a, b) => b.count - a.count);
+144:const CyberBot: React.FC = () => {
+145:  const [messages, setMessages] = useState<any[]>([{ role: 'bot', content: "Greetings. I am the CyberSense Intelligence Assistant. How can I assist you today?", timestamp: new Date() }]);
+150:  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [messages]);
+152:  const handleSend = async () => {
+154:    const userMsg = { role: 'user', content: input, timestamp: new Date() };
+158:    try {
+159:      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+160:      const response = await ai.models.generateContent({
+162:        contents: [{ role: "user", parts: [{ text: input }] }],
+163:        config: { systemInstruction: "You are the CyberSense Intelligence Assistant, specialized in CTI and emotion-aware sentiment analysis." }
+165:      setMessages(prev => [...prev, { role: 'bot', content: response.text || "Error processing data.", timestamp: new Date() }]);
+166:    } catch (error) {
+167:      setMessages(prev => [...prev, { role: 'bot', content: "System Error: Connection failed.", timestamp: new Date() }]);
+168:    } finally { setIsLoading(false); }
+175:          <div className="bg-indigo-600 p-2 rounded-lg"><Shield className="text-white" size={20} /></div>
+179:      <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6">
+180:        {messages.map((msg, idx) => (
+181:          <div key={idx} className={cn("flex gap-4 max-w-[85%]", msg.role === 'user' ? "ml-auto flex-row-reverse" : "mr-auto")}>
+182:            <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", msg.role === 'user' ? "bg-indigo-600" : "bg-slate-800 border border-slate-700")}>
+183:              {msg.role === 'user' ? <Smartphone size={16} className="text-white" /> : <Shield size={16} className="text-indigo-400" />}
+185:            <div className={cn("p-4 rounded-2xl text-sm leading-relaxed", msg.role === 'user' ? "bg-indigo-600 text-white rounded-tr-none" : "bg-slate-800/50 text-slate-200 border border-slate-700 rounded-tl-none")}>
+186:              {msg.content}
+193:          <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleSend()} placeholder="Ask about threat patterns..." className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-4 pr-12 py-3 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50" />
+194:          <button onClick={handleSend} disabled={!input.trim() || isLoading} className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 disabled:opacity-50"><Smartphone size={18} /></button>
+203:interface Dataset {
+210:  sampleData?: { id: string; content: string; label?: string; sentiment?: string }[];
+213:interface ThreatCategory {
+226:  {
+234:      { id: 'T1', content: 'We will strike at the heart of the infidels. Our cause is just and our resolve is iron.', label: 'Propaganda', sentiment: 'Negative' },
+235:      { id: 'T2', content: 'Join the ranks of the faithful. The caliphate calls for your strength and devotion.', label: 'Recruitment', sentiment: 'Positive' },
+236:      { id: 'T3', content: 'The enemies of the state are weak and divided. Their end is near.', label: 'Threat', sentiment: 'Negative' },
+239:  {
+247:      { id: 'N1', content: 'Flow: 192.168.1.10 -> 8.8.8.8 | Protocol: TCP | Port: 80 | Bytes: 1.2MB', label: 'Normal', sentiment: 'Neutral' },
+248:      { id: 'N2', content: 'Flow: 10.0.0.5 -> 142.250.1.1 | Protocol: UDP | Port: 53 | High Frequency DNS Queries', label: 'Botnet (C&C)', sentiment: 'Negative' },
+249:      { id: 'N3', content: 'Flow: 172.16.0.2 -> 192.168.1.1 | Protocol: ICMP | Flood Pattern Detected', label: 'DDoS Attack', sentiment: 'Negative' },
+252:  {
+260:      { id: 'R1', content: 'The threat actor "Cobalt Strike" utilized spear-phishing emails with malicious attachments to gain initial access.', label: 'TTP Analysis', sentiment: 'Negative' },
+261:      { id: 'R2', content: 'Analysis of the malware sample reveals a sophisticated modular architecture with anti-debugging features.', label: 'Malware Analysis', sentiment: 'Neutral' },
+262:      { id: 'R3', content: 'The campaign targeted financial institutions in Southeast Asia, exfiltrating sensitive customer data.', label: 'Targeting', sentiment: 'Negative' },
+265:  {
+273:      { id: 'E1', content: 'A major data breach has been reported at a leading tech firm, affecting millions of users worldwide.', label: 'Data Breach', sentiment: 'Negative' },
+274:      { id: 'E2', content: 'Security researchers have discovered a new zero-day vulnerability in a widely used web server software.', label: 'Vulnerability', sentiment: 'Neutral' },
+275:      { id: 'E3', content: 'Law enforcement agencies have successfully dismantled a global botnet operation responsible for massive spam campaigns.', label: 'Takedown', sentiment: 'Positive' },
+278:  {
+286:      { id: 'M1', content: 'Hash: 5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8 | Type: Trojan', label: 'Classification', sentiment: 'Negative' },
+287:      { id: 'M2', content: 'Analyst Comment: Sample exhibits behavior consistent with the Emotet banking trojan.', label: 'Analyst Note', sentiment: 'Negative' },
+288:      { id: 'M3', content: 'Detection Rate: 45/72 on VirusTotal | First Seen: 2023-10-15', label: 'Metadata', sentiment: 'Neutral' },
+291:  {
+299:      { id: 'B1', content: 'Bot Configuration: Response Delay: 5s | Personality: Security Analyst | Target: Twitter API', label: 'Config', sentiment: 'Neutral' },
+300:      { id: 'B2', content: 'Log: Conversation initiated with user @threat_intel_fan. Topic: Recent CVEs.', label: 'Interaction', sentiment: 'Neutral' },
+301:      { id: 'B3', content: 'Metric: 85% success rate in identifying cyber-relevant tweets using NICCS Lexicon.', label: 'Performance', sentiment: 'Positive' },
+304:  {
+312:      { id: '32155', content: 'Followers: 7046 | URL: No | Hashtags: 3 | Mentions: 3 | RTs: 374 | Favs: 3044 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+313:      { id: '64012', content: 'Followers: 3096 | URL: No | Hashtags: 4 | Mentions: 0 | RTs: 473 | Favs: 1853 | Emoticons: 2', label: 'Threat Detected', sentiment: 'Negative' },
+314:      { id: '22062', content: 'Followers: 7381 | URL: No | Hashtags: 1 | Mentions: 2 | RTs: 676 | Favs: 3580 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+315:      { id: '20251', content: 'Followers: 1659 | URL: No | Hashtags: 1 | Mentions: 3 | RTs: 599 | Favs: 4734 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+316:      { id: '66966', content: 'Followers: 9523 | URL: No | Hashtags: 0 | Mentions: 0 | RTs: 675 | Favs: 2054 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+317:      { id: '43373', content: 'Followers: 966 | URL: No | Hashtags: 4 | Mentions: 0 | RTs: 763 | Favs: 1970 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+318:      { id: '97724', content: 'Followers: 9376 | URL: No | Hashtags: 0 | Mentions: 3 | RTs: 70 | Favs: 3791 | Emoticons: 1', label: 'Threat Detected', sentiment: 'Negative' },
+319:      { id: '16657', content: 'Followers: 6371 | URL: Yes | Hashtags: 4 | Mentions: 1 | RTs: 433 | Favs: 3052 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+320:      { id: '30230', content: 'Followers: 4730 | URL: Yes | Hashtags: 5 | Mentions: 2 | RTs: 475 | Favs: 161 | Emoticons: 1', label: 'Threat Detected', sentiment: 'Negative' },
+321:      { id: '44086', content: 'Followers: 773 | URL: No | Hashtags: 4 | Mentions: 3 | RTs: 472 | Favs: 3511 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+322:      { id: '79019', content: 'Followers: 4053 | URL: No | Hashtags: 4 | Mentions: 1 | RTs: 426 | Favs: 532 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+323:      { id: '54964', content: 'Followers: 5982 | URL: No | Hashtags: 3 | Mentions: 3 | RTs: 851 | Favs: 2216 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+324:      { id: '99309', content: 'Followers: 947 | URL: No | Hashtags: 5 | Mentions: 1 | RTs: 1 | Favs: 2307 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+325:      { id: '70616', content: 'Followers: 8090 | URL: Yes | Hashtags: 4 | Mentions: 2 | RTs: 16 | Favs: 1773 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+326:      { id: '61943', content: 'Followers: 5751 | URL: No | Hashtags: 3 | Mentions: 3 | RTs: 603 | Favs: 3586 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+327:      { id: '31220', content: 'Followers: 1864 | URL: Yes | Hashtags: 1 | Mentions: 1 | RTs: 724 | Favs: 3252 | Emoticons: 1', label: 'Threat Detected', sentiment: 'Negative' },
+328:      { id: '83439', content: 'Followers: 3068 | URL: No | Hashtags: 3 | Mentions: 1 | RTs: 725 | Favs: 711 | Emoticons: 2', label: 'Threat Detected', sentiment: 'Negative' },
+329:      { id: '32497', content: 'Followers: 289 | URL: Yes | Hashtags: 2 | Mentions: 3 | RTs: 416 | Favs: 639 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+330:      { id: '75165', content: 'Followers: 9587 | URL: Yes | Hashtags: 3 | Mentions: 1 | RTs: 752 | Favs: 242 | Emoticons: 1', label: 'Threat Detected', sentiment: 'Negative' },
+331:      { id: '60731', content: 'Followers: 2930 | URL: Yes | Hashtags: 2 | Mentions: 1 | RTs: 673 | Favs: 1063 | Emoticons: 1', label: 'Threat Detected', sentiment: 'Negative' },
+332:      { id: '73311', content: 'Followers: 7574 | URL: No | Hashtags: 3 | Mentions: 0 | RTs: 198 | Favs: 1231 | Emoticons: 2', label: 'Threat Detected', sentiment: 'Negative' },
+333:      { id: '37729', content: 'Followers: 724 | URL: No | Hashtags: 2 | Mentions: 2 | RTs: 505 | Favs: 2805 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+334:      { id: '40761', content: 'Followers: 782 | URL: Yes | Hashtags: 0 | Mentions: 0 | RTs: 44 | Favs: 432 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+335:      { id: '82678', content: 'Followers: 8040 | URL: Yes | Hashtags: 0 | Mentions: 2 | RTs: 147 | Favs: 4218 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+336:      { id: '63267', content: 'Followers: 8663 | URL: Yes | Hashtags: 4 | Mentions: 2 | RTs: 376 | Favs: 449 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+337:      { id: '80859', content: 'Followers: 8495 | URL: No | Hashtags: 2 | Mentions: 2 | RTs: 446 | Favs: 3600 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+338:      { id: '15517', content: 'Followers: 6242 | URL: Yes | Hashtags: 3 | Mentions: 0 | RTs: 697 | Favs: 3559 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+339:      { id: '97864', content: 'Followers: 5942 | URL: No | Hashtags: 1 | Mentions: 0 | RTs: 648 | Favs: 3456 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+340:      { id: '47625', content: 'Followers: 9146 | URL: Yes | Hashtags: 4 | Mentions: 1 | RTs: 161 | Favs: 2887 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+341:      { id: '82972', content: 'Followers: 8983 | URL: No | Hashtags: 1 | Mentions: 0 | RTs: 844 | Favs: 3793 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+342:      { id: '94207', content: 'Followers: 4602 | URL: Yes | Hashtags: 4 | Mentions: 1 | RTs: 218 | Favs: 814 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+343:      { id: '6327', content: 'Followers: 6760 | URL: Yes | Hashtags: 5 | Mentions: 1 | RTs: 955 | Favs: 2192 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+344:      { id: '71728', content: 'Followers: 8581 | URL: No | Hashtags: 0 | Mentions: 0 | RTs: 615 | Favs: 3660 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+345:      { id: '97964', content: 'Followers: 4498 | URL: Yes | Hashtags: 3 | Mentions: 3 | RTs: 537 | Favs: 2713 | Emoticons: 2', label: 'Threat Detected', sentiment: 'Negative' },
+346:      { id: '475', content: 'Followers: 9455 | URL: No | Hashtags: 1 | Mentions: 1 | RTs: 866 | Favs: 644 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+347:      { id: '48482', content: 'Followers: 6326 | URL: Yes | Hashtags: 5 | Mentions: 0 | RTs: 812 | Favs: 1167 | Emoticons: 1', label: 'Threat Detected', sentiment: 'Negative' },
+348:      { id: '4859', content: 'Followers: 291 | URL: No | Hashtags: 1 | Mentions: 1 | RTs: 358 | Favs: 1197 | Emoticons: 2', label: 'Threat Detected', sentiment: 'Negative' },
+349:      { id: '44081', content: 'Followers: 1187 | URL: No | Hashtags: 3 | Mentions: 3 | RTs: 447 | Favs: 2790 | Emoticons: 2', label: 'Threat Detected', sentiment: 'Negative' },
+350:      { id: '32719', content: 'Followers: 6239 | URL: No | Hashtags: 1 | Mentions: 3 | RTs: 1000 | Favs: 4036 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+351:      { id: '63757', content: 'Followers: 492 | URL: No | Hashtags: 4 | Mentions: 3 | RTs: 871 | Favs: 4377 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+352:      { id: '40024', content: 'Followers: 9684 | URL: Yes | Hashtags: 1 | Mentions: 1 | RTs: 945 | Favs: 11 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+353:      { id: '25715', content: 'Followers: 6190 | URL: Yes | Hashtags: 5 | Mentions: 3 | RTs: 177 | Favs: 1968 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+354:      { id: '51486', content: 'Followers: 5241 | URL: Yes | Hashtags: 5 | Mentions: 0 | RTs: 785 | Favs: 3338 | Emoticons: 2', label: 'Threat Detected', sentiment: 'Negative' },
+355:      { id: '18279', content: 'Followers: 2383 | URL: No | Hashtags: 5 | Mentions: 2 | RTs: 402 | Favs: 1802 | Emoticons: 2', label: 'Threat Detected', sentiment: 'Negative' },
+356:      { id: '37946', content: 'Followers: 3145 | URL: No | Hashtags: 4 | Mentions: 3 | RTs: 902 | Favs: 1753 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+357:      { id: '18683', content: 'Followers: 6371 | URL: No | Hashtags: 2 | Mentions: 3 | RTs: 264 | Favs: 2813 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+358:      { id: '53646', content: 'Followers: 3472 | URL: Yes | Hashtags: 0 | Mentions: 0 | RTs: 722 | Favs: 3310 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+359:      { id: '21681', content: 'Followers: 8705 | URL: No | Hashtags: 0 | Mentions: 2 | RTs: 726 | Favs: 3538 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+360:      { id: '92581', content: 'Followers: 8959 | URL: Yes | Hashtags: 1 | Mentions: 3 | RTs: 575 | Favs: 390 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+361:      { id: '78312', content: 'Followers: 3714 | URL: Yes | Hashtags: 1 | Mentions: 2 | RTs: 284 | Favs: 351 | Emoticons: 2', label: 'Threat Detected', sentiment: 'Negative' },
+362:      { id: '28506', content: 'Followers: 4062 | URL: No | Hashtags: 0 | Mentions: 1 | RTs: 5 | Favs: 2557 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+363:      { id: '98966', content: 'Followers: 4149 | URL: No | Hashtags: 1 | Mentions: 1 | RTs: 700 | Favs: 3650 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+364:      { id: '51882', content: 'Followers: 3976 | URL: No | Hashtags: 5 | Mentions: 0 | RTs: 166 | Favs: 2296 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+365:      { id: '97978', content: 'Followers: 8722 | URL: Yes | Hashtags: 1 | Mentions: 2 | RTs: 195 | Favs: 1390 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+366:      { id: '57019', content: 'Followers: 7311 | URL: Yes | Hashtags: 3 | Mentions: 3 | RTs: 544 | Favs: 1273 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+367:      { id: '9363', content: 'Followers: 6064 | URL: Yes | Hashtags: 1 | Mentions: 0 | RTs: 262 | Favs: 584 | Emoticons: 1', label: 'Threat Detected', sentiment: 'Negative' },
+368:      { id: '13484', content: 'Followers: 5021 | URL: No | Hashtags: 2 | Mentions: 3 | RTs: 328 | Favs: 4113 | Emoticons: 1', label: 'Threat Detected', sentiment: 'Negative' },
+369:      { id: '57704', content: 'Followers: 5232 | URL: No | Hashtags: 1 | Mentions: 0 | RTs: 351 | Favs: 3271 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+370:      { id: '98420', content: 'Followers: 8727 | URL: No | Hashtags: 0 | Mentions: 0 | RTs: 44 | Favs: 162 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+371:      { id: '31479', content: 'Followers: 2705 | URL: No | Hashtags: 5 | Mentions: 2 | RTs: 84 | Favs: 3802 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+372:      { id: '15619', content: 'Followers: 912 | URL: Yes | Hashtags: 0 | Mentions: 3 | RTs: 165 | Favs: 2219 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+373:      { id: '29704', content: 'Followers: 7757 | URL: No | Hashtags: 4 | Mentions: 1 | RTs: 986 | Favs: 4737 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+374:      { id: '73518', content: 'Followers: 1661 | URL: Yes | Hashtags: 0 | Mentions: 0 | RTs: 466 | Favs: 2286 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+375:      { id: '46473', content: 'Followers: 9031 | URL: Yes | Hashtags: 2 | Mentions: 1 | RTs: 121 | Favs: 532 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+376:      { id: '58619', content: 'Followers: 1649 | URL: Yes | Hashtags: 1 | Mentions: 2 | RTs: 605 | Favs: 3153 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+377:      { id: '84455', content: 'Followers: 2717 | URL: Yes | Hashtags: 0 | Mentions: 3 | RTs: 319 | Favs: 1662 | Emoticons: 1', label: 'Threat Detected', sentiment: 'Negative' },
+378:      { id: '55496', content: 'Followers: 5609 | URL: No | Hashtags: 2 | Mentions: 0 | RTs: 447 | Favs: 14 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+379:      { id: '82801', content: 'Followers: 5459 | URL: Yes | Hashtags: 1 | Mentions: 2 | RTs: 973 | Favs: 508 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+380:      { id: '12732', content: 'Followers: 8768 | URL: Yes | Hashtags: 0 | Mentions: 1 | RTs: 419 | Favs: 1583 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+381:      { id: '39472', content: 'Followers: 4552 | URL: No | Hashtags: 2 | Mentions: 0 | RTs: 148 | Favs: 2862 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+382:      { id: '54693', content: 'Followers: 3988 | URL: No | Hashtags: 0 | Mentions: 2 | RTs: 108 | Favs: 1843 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+383:      { id: '38397', content: 'Followers: 9235 | URL: No | Hashtags: 4 | Mentions: 1 | RTs: 492 | Favs: 1177 | Emoticons: 1', label: 'Threat Detected', sentiment: 'Negative' },
+384:      { id: '13166', content: 'Followers: 2234 | URL: Yes | Hashtags: 0 | Mentions: 0 | RTs: 331 | Favs: 1278 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+385:      { id: '66218', content: 'Followers: 2886 | URL: Yes | Hashtags: 5 | Mentions: 2 | RTs: 496 | Favs: 1318 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+386:      { id: '8360', content: 'Followers: 7161 | URL: Yes | Hashtags: 5 | Mentions: 3 | RTs: 858 | Favs: 1143 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+387:      { id: '51717', content: 'Followers: 9672 | URL: No | Hashtags: 0 | Mentions: 1 | RTs: 159 | Favs: 4638 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+388:      { id: '69695', content: 'Followers: 5187 | URL: Yes | Hashtags: 1 | Mentions: 1 | RTs: 844 | Favs: 1245 | Emoticons: 2', label: 'Threat Detected', sentiment: 'Negative' },
+389:      { id: '5740', content: 'Followers: 237 | URL: Yes | Hashtags: 3 | Mentions: 2 | RTs: 479 | Favs: 3924 | Emoticons: 2', label: 'Threat Detected', sentiment: 'Negative' },
+390:      { id: '80792', content: 'Followers: 9855 | URL: No | Hashtags: 4 | Mentions: 3 | RTs: 224 | Favs: 2747 | Emoticons: 1', label: 'Threat Detected', sentiment: 'Negative' },
+396:  { name: 'Negative', value: 65, color: '#ef4444' },
+397:  { name: 'Neutral', value: 25, color: '#94a3b8' },
+398:  { name: 'Positive', value: 10, color: '#22c55e' },
+402:  { subject: 'Anger', A: 120, fullMark: 150 },
+403:  { subject: 'Fear', A: 98, fullMark: 150 },
+404:  { subject: 'Sadness', A: 30, fullMark: 150 },
+405:  { subject: 'Surprise', A: 45, fullMark: 150 },
+406:  { subject: 'Disgust', A: 85, fullMark: 150 },
+407:  { subject: 'Joy', A: 15, fullMark: 150 },
+411:  { time: '00:00', intensity: 20, fear: 15 },
+412:  { time: '04:00', intensity: 45, fear: 35 },
+413:  { time: '08:00', intensity: 30, fear: 25 },
+414:  { time: '12:00', intensity: 75, fear: 60 },
+415:  { time: '16:00', intensity: 60, fear: 45 },
+416:  { time: '20:00', intensity: 90, fear: 80 },
+417:  { time: '23:59', intensity: 55, fear: 40 },
+434:const THREAT_LEVEL_COLORS = {
+442:  { id: '1', name: 'Ransomware', sentiment: 'Negative', dominantEmotion: 'Fear', intensity: 85, level: 'Critical', description: 'High emotional impact due to immediate financial loss and operational disruption.' },
+443:  { id: '2', name: 'Phishing', sentiment: 'Negative', dominantEmotion: 'Anger', intensity: 60, level: 'High', description: 'Moderate intensity, often relying on urgency and social engineering.' },
+444:  { id: '3', name: 'Botnet Traffic', sentiment: 'Neutral', dominantEmotion: 'Neutral', intensity: 12, level: 'Low', description: 'Automated traffic tends to be emotionally neutral and technical (Section 4).' },
+445:  { id: '4', name: 'APT Activity', sentiment: 'Negative', dominantEmotion: 'Anger/Fear', intensity: 92, level: 'Critical', description: 'Targeted attacks exhibit significantly higher emotional intensity in reports (Section 4).' },
+446:  { id: '5', name: 'Social Engineering', sentiment: 'Negative', dominantEmotion: 'Trust/Deception', intensity: 45, level: 'Medium', description: 'Psychological manipulation that exploits human trust, showing moderate emotional complexity.' },
+451:const StatCard = ({ title, value, icon: Icon, trend, color }: { title: string, value: string, icon: any, trend?: string, color?: string }) => (
+453:    whileHover={{ y: -2 }}
+456:    <div className={cn("p-3 rounded-lg bg-slate-800", color)}>
+457:      <Icon size={24} className="text-white" />
+460:      <p className="text-slate-400 text-sm font-medium">{title}</p>
+462:        <h3 className="text-2xl font-bold text-white">{value}</h3>
+463:        {trend && <span className="text-emerald-400 text-xs font-medium">{trend}</span>}
+469:const SectionHeader = ({ title, subtitle }: { title: string, subtitle?: string }) => (
+473:      {title}
+475:    {subtitle && <p className="text-slate-400 text-sm mt-1">{subtitle}</p>}
+480:const GlobalHeatmap = () => {
+483:    { lat: 40.7128, lng: -74.0060, intensity: 85, emotion: 'Anger', location: 'New York, USA' },
+484:    { lat: 55.7558, lng: 37.6173, intensity: 92, emotion: 'Fear', location: 'Moscow, Russia' },
+485:    { lat: 39.9042, lng: 116.4074, intensity: 78, emotion: 'Disgust', location: 'Beijing, China' },
+486:    { lat: 51.5074, lng: -0.1278, intensity: 45, emotion: 'Surprise', location: 'London, UK' },
+487:    { lat: -33.8688, lng: 151.2093, intensity: 30, emotion: 'Joy', location: 'Sydney, Australia' },
+488:    { lat: 28.6139, lng: 77.2090, intensity: 65, emotion: 'Fear', location: 'New Delhi, India' },
+491:  useEffect(() => {
+506:    d3.json("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson").then((data: any) => {
+526:        .attr("fill", (d: any) => {
+536:        .text((d: any) => `${d.location}\nEmotion: ${d.emotion}\nIntensity: ${d.intensity}%`);
+560:        <svg ref={svgRef} viewBox="0 0 800 450" className="w-full h-full" />
+567:const LiveFeed = () => {
+569:    { id: 1, source: 'AlienVault OTX', title: 'New Ransomware Variant: LockBit 4.0', time: '2 mins ago', emotion: 'Fear', intensity: 88, link: '#' },
+570:    { id: 2, source: 'Krebs on Security', title: 'Data Breach at Major Retailer', time: '15 mins ago', emotion: 'Anger', intensity: 72, link: '#' },
+571:    { id: 3, source: 'Threatpost', title: 'Zero-day in Chrome Patched', time: '1 hour ago', emotion: 'Surprise', intensity: 45, link: '#' },
+572:    { id: 4, source: 'DarkReading', title: 'Phishing Campaign Targeting HR', time: '3 hours ago', emotion: 'Disgust', intensity: 58, link: '#' },
+575:  const handleLoadMore = () => {
+577:      { id: feeds.length + 1, source: 'BleepingComputer', title: 'New Botnet "Mirai-X" spreading via IoT', time: 'Just now', emotion: 'Surprise', intensity: 65, link: '#' },
+578:      { id: feeds.length + 2, source: 'SANS ISC', title: 'Anomalous traffic on port 445', time: 'Just now', emotion: 'Neutral', intensity: 30, link: '#' },
+588:          {feeds.map(feed => (
+590:              key={feed.id}
+591:              initial={{ opacity: 0, height: 0 }}
+592:              animate={{ opacity: 1, height: 'auto' }}
+596:                <div className={cn(
+601:                  <Radio size={20} className="animate-pulse" />
+605:                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{feed.source}</span>
+607:                    <span className="text-[10px] text-slate-500">{feed.time}</span>
+609:                  <h4 className="text-sm font-bold text-white group-hover:text-indigo-400 transition-colors">{feed.title}</h4>
+615:                  <div className={cn(
+619:                  )}>{feed.emotion} ({feed.intensity}%)</div>
+621:                <ChevronRight size={18} className="text-slate-700 group-hover:text-indigo-500 transition-all" />
+628:        onClick={handleLoadMore}
+637:export default function App() {
+650:    { id: 1, type: 'Aggression', threshold: 80, active: true, lastTriggered: '2026-04-14 10:30' },
+651:    { id: 2, type: 'Fear', threshold: 75, active: true, lastTriggered: 'Never' },
+654:    { id: 1, author: 'Analyst_Alpha', avatar: 'A', content: 'The emotional subtext in the recent ShadowLock leak suggests a state-sponsored actor rather than a typical criminal group.', time: '2 hours ago', upvotes: 12, comments: 4 },
+655:    { id: 2, author: 'CTI_Expert', avatar: 'C', content: 'Agreed. The lack of "Joy" or "Excitement" in their manifestos points to a more professional, strategic intent.', time: '5 hours ago', upvotes: 8, comments: 2 },
+669:  useEffect(() => {
+670:    const unsubscribe = onAuthStateChanged(auth, (u) => {
+677:  const handleGoogleLogin = async () => {
+679:    try {
+681:    } catch (error) {
+686:  const handleLogout = () => {
+691:  useEffect(() => {
+694:    const unsubscribe = onSnapshot(q, (snapshot) => {
+695:      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+701:  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+706:    try {
+709:      await addDoc(collection(db, 'uploads'), {
+717:    } catch (error) {
+719:    } finally {
+724:  const handleDeleteUpload = async (id: string) => {
+725:    try {
+727:    } catch (error) {
+735:  const handleCompareDatasets = async () => {
+739:    try {
+740:      if (process.env.GEMINI_API_KEY) {
+741:        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+742:        const response = await ai.models.generateContent({
+745:          Dataset 1: ${dataset1.name} (${dataset1.description})
+746:          Dataset 2: ${dataset2.name} (${dataset2.description})
+752:          config: {
+754:            responseSchema: {
+756:              properties: {
+757:                value: { type: Type.STRING },
+758:                gaps: { type: Type.STRING },
+759:                useCase: { type: Type.STRING }
+766:        if (response.text) {
+770:    } catch (error) {
+772:    } finally {
+778:  const processedTweets = useMemo(() => {
+779:    return SAMPLE_TWEETS.map(t => ({
+785:  const stats = useMemo(() => {
+790:    return {
+799:  const sentimentDist = useMemo(() => {
+800:    const counts = { Negative: 0, Neutral: 0, Positive: 0 };
+803:      { name: 'Negative', value: counts.Negative, color: '#ef4444' },
+804:      { name: 'Neutral', value: counts.Neutral, color: '#94a3b8' },
+805:      { name: 'Positive', value: counts.Positive, color: '#22c55e' },
+809:  const frequentMarkers = useMemo(() => {
+813:  const handleAnalyze = async () => {
+817:    try {
+821:      if (targetLanguage !== 'en' && process.env.GEMINI_API_KEY) {
+822:        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+823:        const translationResponse = await ai.models.generateContent({
+825:          contents: `Translate the following text to English for CTI analysis. Maintain the original tone and emotional subtext: "${analysisText}"`,
+827:        if (translationResponse.text) {
+835:      let insights = {
+842:      const dynamicEmotions = EMOTION_RADAR.map(e => {
+846:        return { ...e, A: Math.min(150, Math.floor(e.A * weight)) };
+851:      if (process.env.GEMINI_API_KEY) {
+852:        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+853:        const response = await ai.models.generateContent({
+855:          contents: `Analyze this threat actor communication based on CTI principles and underground forum slang: "${textToAnalyze}". 
+862:          config: {
+864:            responseSchema: {
+866:              properties: {
+867:                profile: { type: Type.STRING },
+868:                emotions: { type: Type.STRING },
+869:                intent: { type: Type.STRING },
+870:                countermeasures: { type: Type.STRING },
+871:                slangDecoded: { type: Type.STRING }
+878:        if (response.text) {
+883:      setAnalysisResult({
+896:      if (aggressionLevel > 130) {
+900:    } catch (error) {
+904:      setAnalysisResult({
+906:        insights: {
+913:    } finally {
+918:  const handleExportReport = () => {
+922:    const fileName = `CyberSense_Analysis_Report_${timestamp}.txt`;
+926:Generated on: ${new Date().toLocaleString()}
+927:Source Text: "${analysisText}"
+931:Overall Sentiment: ${analysisResult.sentiment}
+932:Polarity Score: ${analysisResult.polarity}
+933:Subjectivity Score: ${analysisResult.subjectivity}
+934:Cyber Relevance: ${analysisResult.isCyberRelevant ? 'YES' : 'NO'}
+938:${analysisResult.emotions.map((e: any) => `${e.subject}: ${e.A}`).join('\n')}
+942:Actor Motivation: ${analysisResult.insights.motivation}
+943:Public Reaction: ${analysisResult.insights.publicReaction}
+944:Psychological Impact: ${analysisResult.insights.psychologicalImpact}
+948:    if (analysisResult.aiReport) {
+952:${analysisResult.aiReport.profile}
+955:${analysisResult.aiReport.intent}
+958:${analysisResult.aiReport.emotions}
+961:${analysisResult.aiReport.countermeasures}
+965:    const blob = new Blob([reportContent], { type: 'text/plain' });
+976:  const handleAddAlert = () => {
+977:    const newAlert = {
+987:  const handleAddComment = () => {
+989:    const comment = {
+1003:    const stixReport = {
+1005:      id: `bundle--${crypto.randomUUID()}`,
+1007:        {
+1009:          id: `indicator--${crypto.randomUUID()}`,
+1013:          description: `Analysis of: ${analysisText}`,
+1019:            {
+1025:          custom_properties: {
+1034:    const blob = new Blob([JSON.stringify(stixReport, null, 2)], { type: 'application/json' });
+1038:    link.download = `CyberSense_STIX_Report_${new Date().getTime()}.json`;
+1045:  if (!user && showLogin) {
+1049:          initial={{ opacity: 0, y: 20 }}
+1050:          animate={{ opacity: 1, y: 0 }}
+1055:              <Shield size={32} className="text-white" />
+1063:              onClick={handleGoogleLogin}
+1073:                onClick={() => setUser({ 
+1090:      {/* Sidebar */}
+1094:            <Shield className="text-white" size={24} />
+1101:            onClick={() => setActiveTab('dashboard')}
+1102:            className={cn(
+1107:            <Activity size={20} />
+1111:            onClick={() => setActiveTab('datasets')}
+1112:            className={cn(
+1117:            <Database size={20} />
+1121:            onClick={() => setActiveTab('analysis')}
+1122:            className={cn(
+1127:            <BrainCircuit size={20} />
+1131:            onClick={() => setActiveTab('comparison')}
+1132:            className={cn(
+1137:            <Zap size={20} />
+1146:            onClick={() => setActiveTab('heatmap')}
+1147:            className={cn(
+1152:            <Map size={20} />
+1156:            onClick={() => setActiveTab('alerts')}
+1157:            className={cn(
+1162:            <Bell size={20} />
+1166:            onClick={() => setActiveTab('collaboration')}
+1167:            className={cn(
+1172:            <Users size={20} />
+1176:            onClick={() => setActiveTab('darkweb')}
+1177:            className={cn(
+1182:            <Terminal size={20} />
+1187:            onClick={() => setActiveTab('chatbot')}
+1188:            className={cn(
+1193:            <MessageSquare size={20} />
+1197:            onClick={() => setActiveTab('storage')}
+1198:            className={cn(
+1203:            <Cloud size={20} />
+1209:          {user ? (
+1211:              {user.photoURL ? (
+1212:                <img src={user.photoURL} alt={user.displayName} className="w-8 h-8 rounded-full" />
+1215:                  {user.displayName?.charAt(0) || 'A'}
+1219:                <p className="text-xs font-bold text-white truncate">{user.displayName || 'Analyst'}</p>
+1220:                <button onClick={handleLogout} className="text-[10px] text-indigo-400 hover:underline flex items-center gap-1">
+1221:                  <LogOut size={10} /> Sign Out
+1227:              onClick={() => setShowLogin(true)}
+1243:      {/* Main Content */}
+1245:        {/* Header */}
+1249:              {activeTab === 'dashboard' && "Intelligence Overview"}
+1250:              {activeTab === 'datasets' && "Dataset Explorer"}
+1251:              {activeTab === 'analysis' && "Emotion-Aware Sentiment Analysis"}
+1252:              {activeTab === 'comparison' && "Threat Categorization & Comparison"}
+1253:              {activeTab === 'chatbot' && "Cyber Intelligence Chatbot"}
+1259:              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+1267:              <Globe size={20} />
+1273:          {/* Dashboard Tab */}
+1274:          {activeTab === 'dashboard' && (
+1277:              initial={{ opacity: 0, y: 10 }}
+1278:              animate={{ opacity: 1, y: 0 }}
+1279:              exit={{ opacity: 0, y: -10 }}
+1283:                <StatCard title="Corpus C Size" value={stats.corpusSize.toString()} icon={Activity} color="bg-indigo-500" />
+1284:                <StatCard title="H-Set (Cyber)" value={stats.hSetSize.toString()} icon={Shield} color="bg-rose-500" />
+1285:                <StatCard title="B-Set (Other)" value={stats.bSetSize.toString()} icon={Globe} color="bg-slate-700" />
+1286:                <StatCard title="Outliers Detected" value={stats.outliersCount.toString()} icon={AlertTriangle} color="bg-amber-500" />
+1290:                {/* Research Context */}
+1296:                        <Shield size={14} />
+1305:                        <Database size={14} />
+1314:                        <TrendingUp size={14} />
+1324:                {/* Subjectivity vs Polarity Scatter Plot (Figure 4) */}
+1329:                      <LineChart data={processedTweets}>
+1331:                        <XAxis dataKey="polarity" type="number" domain={[-1, 1]} tick={{ fill: '#94a3b8' }} label={{ value: 'Polarity', position: 'bottom', fill: '#94a3b8' }} />
+1332:                        <YAxis dataKey="subjectivity" type="number" domain={[0, 1]} tick={{ fill: '#94a3b8' }} label={{ value: 'Subjectivity', angle: -90, position: 'left', fill: '#94a3b8' }} />
+1333:                        <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b' }} />
+1334:                        <Line type="monotone" dataKey="subjectivity" stroke="transparent" dot={(props: any) => {
+1335:                          const { cx, cy, payload } = props;
+1339:                              cx={cx} 
+1340:                              cy={cy} 
+1341:                              r={isOutlier ? 6 : 4} 
+1342:                              fill={isOutlier ? '#ef4444' : '#6366f1'} 
+1343:                              stroke={isOutlier ? '#fff' : 'none'}
+1352:                {/* Frequent Markers (Ψf) */}
+1356:                    {frequentMarkers.map((marker, idx) => (
+1357:                      <div key={marker.word} className="flex items-center justify-between p-3 bg-slate-950 rounded-lg border border-slate-800">
+1359:                          <span className="text-indigo-500 font-mono text-xs">#{idx + 1}</span>
+1360:                          <span className="text-sm font-medium text-white">{marker.word}</span>
+1362:                        <span className="text-xs text-slate-500">{(marker.support * 100).toFixed(1)}% support</span>
+1368:                      <Info size={12} className="inline mr-1 mb-0.5" />
+1376:                {/* Sentiment Distribution (Table 1) */}
+1381:                      <BarChart data={sentimentDist}>
+1382:                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+1383:                        <XAxis dataKey="name" tick={{ fill: '#94a3b8' }} />
+1384:                        <YAxis tick={{ fill: '#94a3b8' }} />
+1385:                        <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b' }} />
+1387:                          {sentimentDist.map((entry, index) => (
+1388:                            <Cell key={`cell-${index}`} fill={entry.color} />
+1396:              {/* Recent Alerts */}
+1403:                  {[
+1404:                    { id: 1, title: 'New Ransomware Variant "ShadowLock"', time: '12 mins ago', emotion: 'Fear', level: 'Critical' },
+1405:                    { id: 2, title: 'Radicalization spike in ISIS Twitter Dataset', time: '45 mins ago', emotion: 'Anger', level: 'High' },
+1406:                    { id: 3, title: 'Anomalous Botnet traffic in CTU-13 node', time: '2 hours ago', emotion: 'Neutral', level: 'Medium' },
+1408:                    <div key={alert.id} className="p-4 flex items-center justify-between hover:bg-slate-800/30 transition-colors">
+1410:                        <div className={cn(
+1414:                          {alert.level === 'Critical' ? <AlertTriangle size={20} /> : <Info size={20} />}
+1417:                          <h4 className="text-sm font-semibold text-white">{alert.title}</h4>
+1418:                          <p className="text-xs text-slate-400">{alert.time} • Dominant Emotion: <span className="text-slate-200">{alert.emotion}</span></p>
+1421:                      <div className={cn(
+1425:                        {alert.level}
+1435:          {/* Datasets Tab */}
+1436:          {activeTab === 'datasets' && (
+1439:              initial={{ opacity: 0, x: 20 }}
+1440:              animate={{ opacity: 1, x: 0 }}
+1441:              exit={{ opacity: 0, x: -20 }}
+1444:              {!selectedDatasetId ? (
+1446:                  {DATASETS.map((dataset) => (
+1448:                      key={dataset.id}
+1449:                      whileHover={{ y: -4 }}
+1454:                          {dataset.type === 'Social Media' && <MessageSquare size={24} />}
+1455:                          {dataset.type === 'Network Traffic' && <Zap size={24} />}
+1456:                          {dataset.type === 'Reports' && <FileText size={24} />}
+1457:                          {dataset.type === 'Events' && <Globe size={24} />}
+1458:                          {dataset.type === 'Metadata' && <Database size={24} />}
+1461:                          {dataset.type}
+1464:                      <h3 className="text-lg font-bold text-white mb-2">{dataset.name}</h3>
+1466:                        {dataset.description}
+1471:                          <span className="text-slate-200 font-medium">{dataset.size}</span>
+1475:                          <span className="text-slate-200 font-medium text-right max-w-[150px]">{dataset.relevance}</span>
+1479:                        onClick={() => setSelectedDatasetId(dataset.id)}
+1482:                        Explore Data <ChevronRight size={16} />
+1490:                    onClick={() => setSelectedDatasetId(null)}
+1493:                    <ChevronRight size={16} className="rotate-180" /> Back to Datasets
+1496:                  {(() => {
+1504:                              <h2 className="text-2xl font-bold text-white mb-1">{dataset.name}</h2>
+1505:                              <p className="text-slate-400 text-sm">{dataset.description}</p>
+1509:                                {dataset.type}
+1512:                                {dataset.size}
+1521:                                {dataset.sampleData?.map((record) => (
+1522:                                  <div key={record.id} className="bg-slate-950 border border-slate-800 rounded-xl p-4 hover:border-indigo-500/50 transition-colors group">
+1524:                                      <span className="text-[10px] font-mono text-indigo-500 bg-indigo-500/5 px-1.5 py-0.5 rounded">ID: {record.id}</span>
+1526:                                        {record.label && (
+1528:                                            {record.label}
+1531:                                        {record.sentiment && (
+1532:                                          <span className={cn(
+1538:                                            {record.sentiment}
+1544:                                      {record.content}
+1555:                                  {dataset.relevance}
+1560:                                      <Shield size={16} />
+1569:                                      <Activity size={16} />
+1580:                                <BrainCircuit className="mb-4" size={32} />
+1586:                                  onClick={() => setActiveTab('analysis')}
+1603:          {/* Analysis Tab */}
+1604:          {activeTab === 'analysis' && (
+1607:              initial={{ opacity: 0, scale: 0.95 }}
+1608:              animate={{ opacity: 1, scale: 1 }}
+1609:              exit={{ opacity: 0, scale: 0.95 }}
+1618:                      <Languages size={14} className="text-indigo-400" />
+1620:                        value={targetLanguage}
+1621:                        onChange={(e) => setTargetLanguage(e.target.value)}
+1634:                    value={analysisText}
+1635:                    onChange={(e) => setAnalysisText(e.target.value)}
+1642:                        onClick={() => setAnalysisText('We will make them pay for their interference. Our vengeance will be swift and digital.')}
+1648:                        onClick={() => setAnalysisText('The system has been compromised. We are seeing massive data exfiltration across all nodes.')}
+1655:                      onClick={handleAnalyze}
+1656:                      disabled={isAnalyzing || !analysisText}
+1657:                      className={cn(
+1662:                      {isAnalyzing ? (
+1669:                          <Zap size={18} />
+1678:              {analysisResult && !isAnalyzing && (
+1682:                      onClick={handleExportSTIX}
+1685:                      <Share2 size={18} className="text-emerald-400" />
+1689:                      onClick={handleExportReport}
+1692:                      <FileText size={18} className="text-indigo-400" />
+1697:                    initial={{ opacity: 0, y: 20 }}
+1698:                    animate={{ opacity: 1, y: 0 }}
+1703:                        <Activity size={20} className="text-indigo-500" />
+1709:                          <span className={cn(
+1713:                            {analysisResult.sentiment}
+1718:                          <span className="text-white font-mono">{analysisResult.score}</span>
+1722:                          <span className={cn(
+1726:                            {analysisResult.threatLevel}
+1734:                        <Ghost size={20} className="text-indigo-500" />
+1739:                          <RadarChart cx="50%" cy="50%" outerRadius="80%" data={analysisResult.emotions || EMOTION_RADAR}>
+1741:                            <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 10 }} />
+1742:                            <PolarRadiusAxis angle={30} domain={[0, 150]} tick={false} axisLine={false} />
+1748:                              fillOpacity={0.5}
+1751:                              contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
+1752:                              itemStyle={{ color: '#f8fafc' }}
+1758:                        {EMOTION_RADAR.map((item) => (
+1759:                          <div key={item.subject} className="flex items-center gap-1.5">
+1761:                            <span className="text-[10px] text-slate-400 uppercase tracking-wider">{item.subject}</span>
+1769:                        <BrainCircuit size={20} className="text-indigo-500" />
+1775:                          <span className="text-white font-mono">{analysisResult.polarity}</span>
+1779:                          <span className="text-white font-mono">{analysisResult.subjectivity}</span>
+1783:                          <span className={cn(
+1787:                            {analysisResult.isCyberRelevant ? 'YES' : 'NO'}
+1795:                    initial={{ opacity: 0, y: 10 }}
+1796:                    animate={{ opacity: 1, y: 0 }}
+1800:                      <Info size={20} className="text-indigo-500" />
+1806:                          <TrendingUp size={14} /> Actor Motivation
+1808:                        <p className="text-sm text-slate-300 leading-relaxed">{analysisResult.insights.motivation}</p>
+1812:                          <Globe size={14} /> Public Reaction
+1814:                        <p className="text-sm text-slate-300 leading-relaxed">{analysisResult.insights.publicReaction}</p>
+1818:                          <Activity size={14} /> Psychological Impact
+1820:                        <p className="text-sm text-slate-300 leading-relaxed">{analysisResult.insights.psychologicalImpact}</p>
+1824:                    {analysisResult.aiReport && (
+1827:                          <Shield size={20} className="text-emerald-500" />
+1834:                              <p className="text-sm text-slate-300 bg-slate-950/30 p-4 rounded-xl border border-slate-800/50">{analysisResult.aiReport.profile}</p>
+1838:                              <p className="text-sm text-slate-300 bg-slate-950/30 p-4 rounded-xl border border-slate-800/50">{analysisResult.aiReport.intent}</p>
+1844:                              <p className="text-sm text-slate-300 bg-slate-950/30 p-4 rounded-xl border border-slate-800/50">{analysisResult.aiReport.emotions}</p>
+1848:                              <p className="text-sm text-slate-300 bg-slate-950/30 p-4 rounded-xl border border-slate-800/50">{analysisResult.aiReport.countermeasures}</p>
+1850:                            {analysisResult.aiReport.slangDecoded && (
+1853:                                  <Terminal size={14} /> Slang/Jargon Decoded
+1856:                                  {analysisResult.aiReport.slangDecoded}
+1870:          {/* Comparison Tab */}
+1871:          {activeTab === 'comparison' && (
+1874:              initial={{ opacity: 0, y: 10 }}
+1875:              animate={{ opacity: 1, y: 0 }}
+1876:              exit={{ opacity: 0, y: -10 }}
+1884:                      <BarChart data={THREAT_CATEGORIES} layout="vertical">
+1885:                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
+1886:                        <XAxis type="number" domain={[0, 100]} hide />
+1887:                        <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: '#f8fafc', fontSize: 12 }} width={100} />
+1889:                          cursor={{ fill: '#1e293b' }}
+1890:                          contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
+1891:                          itemStyle={{ color: '#f8fafc' }}
+1893:                        <Bar dataKey="intensity" radius={[0, 4, 4, 0]}>
+1894:                          {THREAT_CATEGORIES.map((entry, index) => (
+1895:                            <Cell key={`cell-${index}`} fill={THREAT_LEVEL_COLORS[entry.level]} />
+1904:                  {THREAT_CATEGORIES.map((category) => (
+1905:                    <div key={category.id} className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+1909:                            {category.name}
+1910:                            <span className={cn(
+1917:                              {category.level}
+1922:                            <span className="text-xs font-semibold text-indigo-400">{category.dominantEmotion}</span>
+1926:                          <span className="text-xs font-mono text-slate-500">{category.intensity}% Intensity</span>
+1930:                        {category.description}
+1934:                          <div className={cn(
+1940:                          )} style={{ width: `${category.intensity}%` }} />
+1954:                      value={compareDataset1}
+1955:                      onChange={(e) => setCompareDataset1(e.target.value)}
+1958:                      {DATASETS.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+1960:                    {dataset1 && (
+1964:                          <span className="text-xs font-bold text-indigo-400">{dataset1.type}</span>
+1968:                          <span className="text-xs font-bold text-white">{dataset1.size}</span>
+1972:                          <p className="text-xs text-slate-300 leading-relaxed">{dataset1.relevance}</p>
+1981:                      value={compareDataset2}
+1982:                      onChange={(e) => setCompareDataset2(e.target.value)}
+1985:                      {DATASETS.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+1987:                    {dataset2 && (
+1991:                          <span className="text-xs font-bold text-emerald-400">{dataset2.type}</span>
+1995:                          <span className="text-xs font-bold text-white">{dataset2.size}</span>
+1999:                          <p className="text-xs text-slate-300 leading-relaxed">{dataset2.relevance}</p>
+2008:                    onClick={handleCompareDatasets}
+2009:                    disabled={isComparing}
+2012:                    {isComparing ? (
+2014:                        <Loader2 size={18} className="animate-spin" />
+2019:                        <BrainCircuit size={18} />
+2026:                {comparisonReport && (
+2028:                    initial={{ opacity: 0, scale: 0.98 }}
+2029:                    animate={{ opacity: 1, scale: 1 }}
+2033:                      <Zap size={16} /> AI Comparative Intelligence
+2038:                        <p className="text-sm text-slate-300 leading-relaxed">{comparisonReport.value}</p>
+2042:                        <p className="text-sm text-slate-300 leading-relaxed">{comparisonReport.gaps}</p>
+2046:                        <p className="text-sm text-slate-300 leading-relaxed">{comparisonReport.useCase}</p>
+2066:                            <div className="h-full bg-rose-500" style={{ width: '45%' }} />
+2075:                            <div className="h-full bg-rose-400" style={{ width: '62%' }} />
+2084:                            <div className="h-full bg-rose-600" style={{ width: '78%' }} />
+2098:                  {Object.entries(THREAT_LEVEL_COLORS).map(([level, color]) => (
+2099:                    <div key={level} className="flex items-center gap-2">
+2100:                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+2101:                      <span className="text-xs font-medium text-slate-300">{level}</span>
+2113:                <Skull className="mx-auto text-slate-700 mb-4" size={48} />
+2136:          {/* Chatbot Tab */}
+2137:          {activeTab === 'chatbot' && (
+2140:              initial={{ opacity: 0, y: 10 }}
+2141:              animate={{ opacity: 1, y: 0 }}
+2142:              exit={{ opacity: 0, y: -10 }}
+2149:          {/* Storage Tab */}
+2150:          {activeTab === 'storage' && (
+2153:              initial={{ opacity: 0, y: 10 }}
+2154:              animate={{ opacity: 1, y: 0 }}
+2155:              exit={{ opacity: 0, y: -10 }}
+2158:              {!user ? (
+2160:                  <Lock className="mx-auto text-indigo-500 mb-6" size={48} />
+2166:                    onClick={() => setShowLogin(true)}
+2175:                    <StatCard title="Total Storage" value="2.4 GB" icon={HardDrive} color="bg-indigo-500/10 text-indigo-500" />
+2176:                    <StatCard title="Files Uploaded" value={uploads.length.toString()} icon={FileText} color="bg-emerald-500/10 text-emerald-500" />
+2177:                    <StatCard title="Cloud Status" value="Healthy" icon={Cloud} color="bg-sky-500/10 text-sky-500" />
+2187:                        {isUploading ? (
+2189:                            <Loader2 size={20} className="animate-spin" />
+2194:                            <Upload size={20} />
+2201:                          onChange={handleFileUpload}
+2202:                          disabled={isUploading}
+2210:                      {uploads.length === 0 ? (
+2212:                          <Cloud className="mx-auto text-slate-700 mb-4" size={32} />
+2217:                          {uploads.map((file) => (
+2218:                            <div key={file.id} className="bg-slate-950 border border-slate-800 rounded-xl p-4 flex items-center justify-between hover:border-slate-700 transition-colors group">
+2221:                                  <FileText size={20} />
+2224:                                  <h4 className="text-sm font-bold text-white mb-0.5">{file.fileName}</h4>
+2226:                                    <span className="text-[10px] text-slate-500 uppercase font-mono">{(file.fileSize / 1024).toFixed(1)} KB</span>
+2228:                                    <span className="text-[10px] text-emerald-500 font-bold uppercase tracking-tighter">{file.status}</span>
+2230:                                    <span className="text-[10px] text-slate-500">{file.createdAt?.toDate().toLocaleDateString()}</span>
+2235:                                onClick={() => handleDeleteUpload(file.id)}
+2238:                                <Trash2 size={18} />
+2249:                      <Info size={20} />
+2263:          {/* Heatmap Tab */}
+2264:          {activeTab === 'heatmap' && (
+2267:              initial={{ opacity: 0, y: 10 }}
+2268:              animate={{ opacity: 1, y: 0 }}
+2269:              exit={{ opacity: 0, y: -10 }}
+2278:                    {[
+2279:                      { region: 'North America', intensity: 45, emotion: 'Neutral', color: 'bg-indigo-500' },
+2280:                      { region: 'Eastern Europe', intensity: 92, emotion: 'Fear', color: 'bg-orange-500' },
+2281:                      { region: 'East Asia', intensity: 78, emotion: 'Anger', color: 'bg-rose-500' },
+2282:                      { region: 'Western Europe', intensity: 35, emotion: 'Surprise', color: 'bg-amber-500' },
+2284:                      <div key={r.region} className="space-y-2">
+2286:                          <span className="text-sm font-bold text-white">{r.region}</span>
+2287:                          <span className="text-xs text-slate-400">{r.emotion} ({r.intensity}%)</span>
+2290:                          <div className={cn("h-full", r.color)} style={{ width: `${r.intensity}%` }} />
+2300:          {/* Alerts Tab */}
+2301:          {activeTab === 'alerts' && (
+2304:              initial={{ opacity: 0, y: 10 }}
+2305:              animate={{ opacity: 1, y: 0 }}
+2306:              exit={{ opacity: 0, y: -10 }}
+2313:                  {alerts.map(alert => (
+2314:                    <div key={alert.id} className="bg-slate-950 border border-slate-800 rounded-xl p-6 space-y-4">
+2318:                            <Bell size={20} />
+2321:                            <h4 className="font-bold text-white">{alert.type} Threshold</h4>
+2322:                            <p className="text-[10px] text-slate-500 uppercase tracking-widest">Last Triggered: {alert.lastTriggered}</p>
+2326:                          <div className={cn("w-2 h-2 rounded-full", alert.active ? "bg-emerald-500" : "bg-slate-700")} />
+2327:                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{alert.active ? 'Active' : 'Disabled'}</span>
+2334:                          <span className="text-white font-mono">{alert.threshold}%</span>
+2340:                          value={alert.threshold}
+2341:                          onChange={(e) => setAlerts(alerts.map(a => a.id === alert.id ? { ...a, threshold: parseInt(e.target.value) } : a))}
+2349:                          <Filter size={14} />
+2355:                    onClick={handleAddAlert}
+2358:                    <Zap size={24} />
+2366:          {/* Collaboration Tab */}
+2367:          {activeTab === 'collaboration' && (
+2370:              initial={{ opacity: 0, y: 10 }}
+2371:              animate={{ opacity: 1, y: 0 }}
+2372:              exit={{ opacity: 0, y: -10 }}
+2380:                      {comments.map(post => (
+2381:                        <div key={post.id} className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-4">
+2384:                              <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-xs">{post.avatar}</div>
+2386:                                <h4 className="text-sm font-bold text-white">{post.author}</h4>
+2387:                                <p className="text-[10px] text-slate-500 uppercase tracking-widest">{post.time}</p>
+2390:                            <button className="text-slate-500 hover:text-white transition-colors"><Share2 size={16} /></button>
+2392:                          <p className="text-sm text-slate-300 leading-relaxed">{post.content}</p>
+2395:                              <ThumbsUp size={14} /> {post.upvotes}
+2398:                              <MessageCircle size={14} /> {post.comments}
+2406:                        value={newComment}
+2407:                        onChange={(e) => setNewComment(e.target.value)}
+2413:                          onClick={handleAddComment}
+2426:                      <Users size={18} className="text-indigo-500" />
+2430:                      {[
+2431:                        { name: 'Analyst_Alpha', status: 'Online', role: 'Senior Auditor' },
+2432:                        { name: 'CTI_Expert', status: 'Online', role: 'Threat Hunter' },
+2433:                        { name: 'Cyber_Sentinel', status: 'Away', role: 'Security Analyst' },
+2435:                        <div key={a.name} className="flex items-center justify-between">
+2439:                              <p className="text-xs font-bold text-white">{a.name}</p>
+2440:                              <p className="text-[10px] text-slate-500">{a.role}</p>
+2444:                            <MessageSquare size={14} />
+2455:          {/* Dark Web Tab */}
+2456:          {activeTab === 'darkweb' && (
+2459:              initial={{ opacity: 0, y: 10 }}
+2460:              animate={{ opacity: 1, y: 0 }}
+2461:              exit={{ opacity: 0, y: -10 }}
+2467:                    <Terminal size={12} className="text-rose-500" />
+2483:                      value={analysisText}
+2484:                      onChange={(e) => setAnalysisText(e.target.value)}
+2492:                          onClick={() => setAnalysisText('Selling fresh logs from major US bank. 10k+ records. No lowballers. Escrow only.')}
+2498:                          onClick={() => setAnalysisText('Need a reliable FUD crypter for my latest payload. Willing to pay top dollar.')}
+2505:                        onClick={handleAnalyze}
+2506:                        disabled={isAnalyzing || !analysisText}
+2509:                        {isAnalyzing ? (
+2510:                          <Loader2 size={18} className="animate-spin" />
+2512:                          <Skull size={18} />
+2523:                        {[
+2524:                          { term: 'FUD', meaning: 'Fully Undetectable' },
+2525:                          { term: 'Logs', meaning: 'Stolen credentials/data' },
+2526:                          { term: 'Crypter', meaning: 'Tool to hide malware' },
+2527:                          { term: 'Escrow', meaning: 'Trusted third-party payment' },
+2528:                          { term: 'Payload', meaning: 'Malicious part of malware' },
+2530:                          <div key={s.term} className="flex justify-between items-center p-2 bg-slate-900 rounded border border-slate-800">
+2531:                            <span className="text-xs font-bold text-white font-mono">{s.term}</span>
+2532:                            <span className="text-[10px] text-slate-500">{s.meaning}</span>
+2545:      {/* Footer */}
+1:import React, { useState, useMemo, useEffect } from 'react';
+44:} from 'lucide-react';
+66:} from 'recharts';
+67:import { GoogleGenAI, Type } from "@google/genai";
+68:import { motion, AnimatePresence } from 'motion/react';
+69:import { clsx, type ClassValue } from 'clsx';
+70:import { twMerge } from 'tailwind-merge';
+73:import { initializeApp as initFirebase } from 'firebase/app';
+74:import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
+75:import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
+86:};
+95:}
+108:};
+112:}
+124:    }
+125:  });
+131:  return { polarity: parseFloat(polarity.toFixed(3)), subjectivity: parseFloat(subjectivity.toFixed(3)), sentiment, isCyberRelevant, frequentMarkers: words.filter(w => SENTIMENT_LEXICON[w] !== undefined) };
+132:}
+135:  const counts: Record<string, number> = {};
+138:    words.forEach(w => { counts[w] = (counts[w] || 0) + 1; });
+139:  });
+140:  return Object.entries(counts).map(([word, count]) => ({ word, count, support: count / tweets.length })).filter(m => m.support >= minSupport).sort((a, b) => b.count - a.count);
+141:}
+145:  const [messages, setMessages] = useState<any[]>([{ role: 'bot', content: "Greetings. I am the CyberSense Intelligence Assistant. How can I assist you today?", timestamp: new Date() }]);
+150:  useEffect(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; }, [messages]);
+154:    const userMsg = { role: 'user', content: input, timestamp: new Date() };
+159:      const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+162:        contents: [{ role: "user", parts: [{ text: input }] }],
+163:        config: { systemInstruction: "You are the CyberSense Intelligence Assistant, specialized in CTI and emotion-aware sentiment analysis." }
+164:      });
+165:      setMessages(prev => [...prev, { role: 'bot', content: response.text || "Error processing data.", timestamp: new Date() }]);
+166:    } catch (error) {
+167:      setMessages(prev => [...prev, { role: 'bot', content: "System Error: Connection failed.", timestamp: new Date() }]);
+168:    } finally { setIsLoading(false); }
+169:  };
+175:          <div className="bg-indigo-600 p-2 rounded-lg"><Shield className="text-white" size={20} /></div>
+179:      <div ref={scrollRef} className="flex-1 overflow-y-auto p-6 space-y-6">
+181:          <div key={idx} className={cn("flex gap-4 max-w-[85%]", msg.role === 'user' ? "ml-auto flex-row-reverse" : "mr-auto")}>
+182:            <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center shrink-0", msg.role === 'user' ? "bg-indigo-600" : "bg-slate-800 border border-slate-700")}>
+183:              {msg.role === 'user' ? <Smartphone size={16} className="text-white" /> : <Shield size={16} className="text-indigo-400" />}
+185:            <div className={cn("p-4 rounded-2xl text-sm leading-relaxed", msg.role === 'user' ? "bg-indigo-600 text-white rounded-tr-none" : "bg-slate-800/50 text-slate-200 border border-slate-700 rounded-tl-none")}>
+186:              {msg.content}
+189:        ))}
+193:          <input type="text" value={input} onChange={(e) => setInput(e.target.value)} onKeyPress={(e) => e.key === 'Enter' && handleSend()} placeholder="Ask about threat patterns..." className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-4 pr-12 py-3 text-sm text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/50" />
+194:          <button onClick={handleSend} disabled={!input.trim() || isLoading} className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-500 disabled:opacity-50"><Smartphone size={18} /></button>
+199:};
+210:  sampleData?: { id: string; content: string; label?: string; sentiment?: string }[];
+211:}
+221:}
+234:      { id: 'T1', content: 'We will strike at the heart of the infidels. Our cause is just and our resolve is iron.', label: 'Propaganda', sentiment: 'Negative' },
+235:      { id: 'T2', content: 'Join the ranks of the faithful. The caliphate calls for your strength and devotion.', label: 'Recruitment', sentiment: 'Positive' },
+236:      { id: 'T3', content: 'The enemies of the state are weak and divided. Their end is near.', label: 'Threat', sentiment: 'Negative' },
+238:  },
+247:      { id: 'N1', content: 'Flow: 192.168.1.10 -> 8.8.8.8 | Protocol: TCP | Port: 80 | Bytes: 1.2MB', label: 'Normal', sentiment: 'Neutral' },
+248:      { id: 'N2', content: 'Flow: 10.0.0.5 -> 142.250.1.1 | Protocol: UDP | Port: 53 | High Frequency DNS Queries', label: 'Botnet (C&C)', sentiment: 'Negative' },
+249:      { id: 'N3', content: 'Flow: 172.16.0.2 -> 192.168.1.1 | Protocol: ICMP | Flood Pattern Detected', label: 'DDoS Attack', sentiment: 'Negative' },
+251:  },
+260:      { id: 'R1', content: 'The threat actor "Cobalt Strike" utilized spear-phishing emails with malicious attachments to gain initial access.', label: 'TTP Analysis', sentiment: 'Negative' },
+261:      { id: 'R2', content: 'Analysis of the malware sample reveals a sophisticated modular architecture with anti-debugging features.', label: 'Malware Analysis', sentiment: 'Neutral' },
+262:      { id: 'R3', content: 'The campaign targeted financial institutions in Southeast Asia, exfiltrating sensitive customer data.', label: 'Targeting', sentiment: 'Negative' },
+264:  },
+273:      { id: 'E1', content: 'A major data breach has been reported at a leading tech firm, affecting millions of users worldwide.', label: 'Data Breach', sentiment: 'Negative' },
+274:      { id: 'E2', content: 'Security researchers have discovered a new zero-day vulnerability in a widely used web server software.', label: 'Vulnerability', sentiment: 'Neutral' },
+275:      { id: 'E3', content: 'Law enforcement agencies have successfully dismantled a global botnet operation responsible for massive spam campaigns.', label: 'Takedown', sentiment: 'Positive' },
+277:  },
+286:      { id: 'M1', content: 'Hash: 5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8 | Type: Trojan', label: 'Classification', sentiment: 'Negative' },
+287:      { id: 'M2', content: 'Analyst Comment: Sample exhibits behavior consistent with the Emotet banking trojan.', label: 'Analyst Note', sentiment: 'Negative' },
+288:      { id: 'M3', content: 'Detection Rate: 45/72 on VirusTotal | First Seen: 2023-10-15', label: 'Metadata', sentiment: 'Neutral' },
+290:  },
+299:      { id: 'B1', content: 'Bot Configuration: Response Delay: 5s | Personality: Security Analyst | Target: Twitter API', label: 'Config', sentiment: 'Neutral' },
+300:      { id: 'B2', content: 'Log: Conversation initiated with user @threat_intel_fan. Topic: Recent CVEs.', label: 'Interaction', sentiment: 'Neutral' },
+301:      { id: 'B3', content: 'Metric: 85% success rate in identifying cyber-relevant tweets using NICCS Lexicon.', label: 'Performance', sentiment: 'Positive' },
+303:  },
+312:      { id: '32155', content: 'Followers: 7046 | URL: No | Hashtags: 3 | Mentions: 3 | RTs: 374 | Favs: 3044 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+313:      { id: '64012', content: 'Followers: 3096 | URL: No | Hashtags: 4 | Mentions: 0 | RTs: 473 | Favs: 1853 | Emoticons: 2', label: 'Threat Detected', sentiment: 'Negative' },
+314:      { id: '22062', content: 'Followers: 7381 | URL: No | Hashtags: 1 | Mentions: 2 | RTs: 676 | Favs: 3580 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+315:      { id: '20251', content: 'Followers: 1659 | URL: No | Hashtags: 1 | Mentions: 3 | RTs: 599 | Favs: 4734 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+316:      { id: '66966', content: 'Followers: 9523 | URL: No | Hashtags: 0 | Mentions: 0 | RTs: 675 | Favs: 2054 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+317:      { id: '43373', content: 'Followers: 966 | URL: No | Hashtags: 4 | Mentions: 0 | RTs: 763 | Favs: 1970 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+318:      { id: '97724', content: 'Followers: 9376 | URL: No | Hashtags: 0 | Mentions: 3 | RTs: 70 | Favs: 3791 | Emoticons: 1', label: 'Threat Detected', sentiment: 'Negative' },
+319:      { id: '16657', content: 'Followers: 6371 | URL: Yes | Hashtags: 4 | Mentions: 1 | RTs: 433 | Favs: 3052 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+320:      { id: '30230', content: 'Followers: 4730 | URL: Yes | Hashtags: 5 | Mentions: 2 | RTs: 475 | Favs: 161 | Emoticons: 1', label: 'Threat Detected', sentiment: 'Negative' },
+321:      { id: '44086', content: 'Followers: 773 | URL: No | Hashtags: 4 | Mentions: 3 | RTs: 472 | Favs: 3511 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+322:      { id: '79019', content: 'Followers: 4053 | URL: No | Hashtags: 4 | Mentions: 1 | RTs: 426 | Favs: 532 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+323:      { id: '54964', content: 'Followers: 5982 | URL: No | Hashtags: 3 | Mentions: 3 | RTs: 851 | Favs: 2216 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+324:      { id: '99309', content: 'Followers: 947 | URL: No | Hashtags: 5 | Mentions: 1 | RTs: 1 | Favs: 2307 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+325:      { id: '70616', content: 'Followers: 8090 | URL: Yes | Hashtags: 4 | Mentions: 2 | RTs: 16 | Favs: 1773 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+326:      { id: '61943', content: 'Followers: 5751 | URL: No | Hashtags: 3 | Mentions: 3 | RTs: 603 | Favs: 3586 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+327:      { id: '31220', content: 'Followers: 1864 | URL: Yes | Hashtags: 1 | Mentions: 1 | RTs: 724 | Favs: 3252 | Emoticons: 1', label: 'Threat Detected', sentiment: 'Negative' },
+328:      { id: '83439', content: 'Followers: 3068 | URL: No | Hashtags: 3 | Mentions: 1 | RTs: 725 | Favs: 711 | Emoticons: 2', label: 'Threat Detected', sentiment: 'Negative' },
+329:      { id: '32497', content: 'Followers: 289 | URL: Yes | Hashtags: 2 | Mentions: 3 | RTs: 416 | Favs: 639 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+330:      { id: '75165', content: 'Followers: 9587 | URL: Yes | Hashtags: 3 | Mentions: 1 | RTs: 752 | Favs: 242 | Emoticons: 1', label: 'Threat Detected', sentiment: 'Negative' },
+331:      { id: '60731', content: 'Followers: 2930 | URL: Yes | Hashtags: 2 | Mentions: 1 | RTs: 673 | Favs: 1063 | Emoticons: 1', label: 'Threat Detected', sentiment: 'Negative' },
+332:      { id: '73311', content: 'Followers: 7574 | URL: No | Hashtags: 3 | Mentions: 0 | RTs: 198 | Favs: 1231 | Emoticons: 2', label: 'Threat Detected', sentiment: 'Negative' },
+333:      { id: '37729', content: 'Followers: 724 | URL: No | Hashtags: 2 | Mentions: 2 | RTs: 505 | Favs: 2805 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+334:      { id: '40761', content: 'Followers: 782 | URL: Yes | Hashtags: 0 | Mentions: 0 | RTs: 44 | Favs: 432 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+335:      { id: '82678', content: 'Followers: 8040 | URL: Yes | Hashtags: 0 | Mentions: 2 | RTs: 147 | Favs: 4218 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+336:      { id: '63267', content: 'Followers: 8663 | URL: Yes | Hashtags: 4 | Mentions: 2 | RTs: 376 | Favs: 449 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+337:      { id: '80859', content: 'Followers: 8495 | URL: No | Hashtags: 2 | Mentions: 2 | RTs: 446 | Favs: 3600 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+338:      { id: '15517', content: 'Followers: 6242 | URL: Yes | Hashtags: 3 | Mentions: 0 | RTs: 697 | Favs: 3559 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+339:      { id: '97864', content: 'Followers: 5942 | URL: No | Hashtags: 1 | Mentions: 0 | RTs: 648 | Favs: 3456 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+340:      { id: '47625', content: 'Followers: 9146 | URL: Yes | Hashtags: 4 | Mentions: 1 | RTs: 161 | Favs: 2887 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+341:      { id: '82972', content: 'Followers: 8983 | URL: No | Hashtags: 1 | Mentions: 0 | RTs: 844 | Favs: 3793 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+342:      { id: '94207', content: 'Followers: 4602 | URL: Yes | Hashtags: 4 | Mentions: 1 | RTs: 218 | Favs: 814 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+343:      { id: '6327', content: 'Followers: 6760 | URL: Yes | Hashtags: 5 | Mentions: 1 | RTs: 955 | Favs: 2192 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+344:      { id: '71728', content: 'Followers: 8581 | URL: No | Hashtags: 0 | Mentions: 0 | RTs: 615 | Favs: 3660 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+345:      { id: '97964', content: 'Followers: 4498 | URL: Yes | Hashtags: 3 | Mentions: 3 | RTs: 537 | Favs: 2713 | Emoticons: 2', label: 'Threat Detected', sentiment: 'Negative' },
+346:      { id: '475', content: 'Followers: 9455 | URL: No | Hashtags: 1 | Mentions: 1 | RTs: 866 | Favs: 644 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+347:      { id: '48482', content: 'Followers: 6326 | URL: Yes | Hashtags: 5 | Mentions: 0 | RTs: 812 | Favs: 1167 | Emoticons: 1', label: 'Threat Detected', sentiment: 'Negative' },
+348:      { id: '4859', content: 'Followers: 291 | URL: No | Hashtags: 1 | Mentions: 1 | RTs: 358 | Favs: 1197 | Emoticons: 2', label: 'Threat Detected', sentiment: 'Negative' },
+349:      { id: '44081', content: 'Followers: 1187 | URL: No | Hashtags: 3 | Mentions: 3 | RTs: 447 | Favs: 2790 | Emoticons: 2', label: 'Threat Detected', sentiment: 'Negative' },
+350:      { id: '32719', content: 'Followers: 6239 | URL: No | Hashtags: 1 | Mentions: 3 | RTs: 1000 | Favs: 4036 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+351:      { id: '63757', content: 'Followers: 492 | URL: No | Hashtags: 4 | Mentions: 3 | RTs: 871 | Favs: 4377 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+352:      { id: '40024', content: 'Followers: 9684 | URL: Yes | Hashtags: 1 | Mentions: 1 | RTs: 945 | Favs: 11 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+353:      { id: '25715', content: 'Followers: 6190 | URL: Yes | Hashtags: 5 | Mentions: 3 | RTs: 177 | Favs: 1968 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+354:      { id: '51486', content: 'Followers: 5241 | URL: Yes | Hashtags: 5 | Mentions: 0 | RTs: 785 | Favs: 3338 | Emoticons: 2', label: 'Threat Detected', sentiment: 'Negative' },
+355:      { id: '18279', content: 'Followers: 2383 | URL: No | Hashtags: 5 | Mentions: 2 | RTs: 402 | Favs: 1802 | Emoticons: 2', label: 'Threat Detected', sentiment: 'Negative' },
+356:      { id: '37946', content: 'Followers: 3145 | URL: No | Hashtags: 4 | Mentions: 3 | RTs: 902 | Favs: 1753 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+357:      { id: '18683', content: 'Followers: 6371 | URL: No | Hashtags: 2 | Mentions: 3 | RTs: 264 | Favs: 2813 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+358:      { id: '53646', content: 'Followers: 3472 | URL: Yes | Hashtags: 0 | Mentions: 0 | RTs: 722 | Favs: 3310 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+359:      { id: '21681', content: 'Followers: 8705 | URL: No | Hashtags: 0 | Mentions: 2 | RTs: 726 | Favs: 3538 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+360:      { id: '92581', content: 'Followers: 8959 | URL: Yes | Hashtags: 1 | Mentions: 3 | RTs: 575 | Favs: 390 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+361:      { id: '78312', content: 'Followers: 3714 | URL: Yes | Hashtags: 1 | Mentions: 2 | RTs: 284 | Favs: 351 | Emoticons: 2', label: 'Threat Detected', sentiment: 'Negative' },
+362:      { id: '28506', content: 'Followers: 4062 | URL: No | Hashtags: 0 | Mentions: 1 | RTs: 5 | Favs: 2557 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+363:      { id: '98966', content: 'Followers: 4149 | URL: No | Hashtags: 1 | Mentions: 1 | RTs: 700 | Favs: 3650 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+364:      { id: '51882', content: 'Followers: 3976 | URL: No | Hashtags: 5 | Mentions: 0 | RTs: 166 | Favs: 2296 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+365:      { id: '97978', content: 'Followers: 8722 | URL: Yes | Hashtags: 1 | Mentions: 2 | RTs: 195 | Favs: 1390 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+366:      { id: '57019', content: 'Followers: 7311 | URL: Yes | Hashtags: 3 | Mentions: 3 | RTs: 544 | Favs: 1273 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+367:      { id: '9363', content: 'Followers: 6064 | URL: Yes | Hashtags: 1 | Mentions: 0 | RTs: 262 | Favs: 584 | Emoticons: 1', label: 'Threat Detected', sentiment: 'Negative' },
+368:      { id: '13484', content: 'Followers: 5021 | URL: No | Hashtags: 2 | Mentions: 3 | RTs: 328 | Favs: 4113 | Emoticons: 1', label: 'Threat Detected', sentiment: 'Negative' },
+369:      { id: '57704', content: 'Followers: 5232 | URL: No | Hashtags: 1 | Mentions: 0 | RTs: 351 | Favs: 3271 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+370:      { id: '98420', content: 'Followers: 8727 | URL: No | Hashtags: 0 | Mentions: 0 | RTs: 44 | Favs: 162 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+371:      { id: '31479', content: 'Followers: 2705 | URL: No | Hashtags: 5 | Mentions: 2 | RTs: 84 | Favs: 3802 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+372:      { id: '15619', content: 'Followers: 912 | URL: Yes | Hashtags: 0 | Mentions: 3 | RTs: 165 | Favs: 2219 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+373:      { id: '29704', content: 'Followers: 7757 | URL: No | Hashtags: 4 | Mentions: 1 | RTs: 986 | Favs: 4737 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+374:      { id: '73518', content: 'Followers: 1661 | URL: Yes | Hashtags: 0 | Mentions: 0 | RTs: 466 | Favs: 2286 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+375:      { id: '46473', content: 'Followers: 9031 | URL: Yes | Hashtags: 2 | Mentions: 1 | RTs: 121 | Favs: 532 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+376:      { id: '58619', content: 'Followers: 1649 | URL: Yes | Hashtags: 1 | Mentions: 2 | RTs: 605 | Favs: 3153 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+377:      { id: '84455', content: 'Followers: 2717 | URL: Yes | Hashtags: 0 | Mentions: 3 | RTs: 319 | Favs: 1662 | Emoticons: 1', label: 'Threat Detected', sentiment: 'Negative' },
+378:      { id: '55496', content: 'Followers: 5609 | URL: No | Hashtags: 2 | Mentions: 0 | RTs: 447 | Favs: 14 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+379:      { id: '82801', content: 'Followers: 5459 | URL: Yes | Hashtags: 1 | Mentions: 2 | RTs: 973 | Favs: 508 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+380:      { id: '12732', content: 'Followers: 8768 | URL: Yes | Hashtags: 0 | Mentions: 1 | RTs: 419 | Favs: 1583 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+381:      { id: '39472', content: 'Followers: 4552 | URL: No | Hashtags: 2 | Mentions: 0 | RTs: 148 | Favs: 2862 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+382:      { id: '54693', content: 'Followers: 3988 | URL: No | Hashtags: 0 | Mentions: 2 | RTs: 108 | Favs: 1843 | Emoticons: 0', label: 'Threat Detected', sentiment: 'Negative' },
+383:      { id: '38397', content: 'Followers: 9235 | URL: No | Hashtags: 4 | Mentions: 1 | RTs: 492 | Favs: 1177 | Emoticons: 1', label: 'Threat Detected', sentiment: 'Negative' },
+384:      { id: '13166', content: 'Followers: 2234 | URL: Yes | Hashtags: 0 | Mentions: 0 | RTs: 331 | Favs: 1278 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+385:      { id: '66218', content: 'Followers: 2886 | URL: Yes | Hashtags: 5 | Mentions: 2 | RTs: 496 | Favs: 1318 | Emoticons: 2', label: 'Non-Threat', sentiment: 'Neutral' },
+386:      { id: '8360', content: 'Followers: 7161 | URL: Yes | Hashtags: 5 | Mentions: 3 | RTs: 858 | Favs: 1143 | Emoticons: 1', label: 'Non-Threat', sentiment: 'Neutral' },
+387:      { id: '51717', content: 'Followers: 9672 | URL: No | Hashtags: 0 | Mentions: 1 | RTs: 159 | Favs: 4638 | Emoticons: 0', label: 'Non-Threat', sentiment: 'Neutral' },
+388:      { id: '69695', content: 'Followers: 5187 | URL: Yes | Hashtags: 1 | Mentions: 1 | RTs: 844 | Favs: 1245 | Emoticons: 2', label: 'Threat Detected', sentiment: 'Negative' },
+389:      { id: '5740', content: 'Followers: 237 | URL: Yes | Hashtags: 3 | Mentions: 2 | RTs: 479 | Favs: 3924 | Emoticons: 2', label: 'Threat Detected', sentiment: 'Negative' },
+390:      { id: '80792', content: 'Followers: 9855 | URL: No | Hashtags: 4 | Mentions: 3 | RTs: 224 | Favs: 2747 | Emoticons: 1', label: 'Threat Detected', sentiment: 'Negative' },
+392:  }
+396:  { name: 'Negative', value: 65, color: '#ef4444' },
+397:  { name: 'Neutral', value: 25, color: '#94a3b8' },
+398:  { name: 'Positive', value: 10, color: '#22c55e' },
+402:  { subject: 'Anger', A: 120, fullMark: 150 },
+403:  { subject: 'Fear', A: 98, fullMark: 150 },
+404:  { subject: 'Sadness', A: 30, fullMark: 150 },
+405:  { subject: 'Surprise', A: 45, fullMark: 150 },
+406:  { subject: 'Disgust', A: 85, fullMark: 150 },
+407:  { subject: 'Joy', A: 15, fullMark: 150 },
+411:  { time: '00:00', intensity: 20, fear: 15 },
+412:  { time: '04:00', intensity: 45, fear: 35 },
+413:  { time: '08:00', intensity: 30, fear: 25 },
+414:  { time: '12:00', intensity: 75, fear: 60 },
+415:  { time: '16:00', intensity: 60, fear: 45 },
+416:  { time: '20:00', intensity: 90, fear: 80 },
+417:  { time: '23:59', intensity: 55, fear: 40 },
+439:};
+442:  { id: '1', name: 'Ransomware', sentiment: 'Negative', dominantEmotion: 'Fear', intensity: 85, level: 'Critical', description: 'High emotional impact due to immediate financial loss and operational disruption.' },
+443:  { id: '2', name: 'Phishing', sentiment: 'Negative', dominantEmotion: 'Anger', intensity: 60, level: 'High', description: 'Moderate intensity, often relying on urgency and social engineering.' },
+444:  { id: '3', name: 'Botnet Traffic', sentiment: 'Neutral', dominantEmotion: 'Neutral', intensity: 12, level: 'Low', description: 'Automated traffic tends to be emotionally neutral and technical (Section 4).' },
+445:  { id: '4', name: 'APT Activity', sentiment: 'Negative', dominantEmotion: 'Anger/Fear', intensity: 92, level: 'Critical', description: 'Targeted attacks exhibit significantly higher emotional intensity in reports (Section 4).' },
+446:  { id: '5', name: 'Social Engineering', sentiment: 'Negative', dominantEmotion: 'Trust/Deception', intensity: 45, level: 'Medium', description: 'Psychological manipulation that exploits human trust, showing moderate emotional complexity.' },
+451:const StatCard = ({ title, value, icon: Icon, trend, color }: { title: string, value: string, icon: any, trend?: string, color?: string }) => (
+453:    whileHover={{ y: -2 }}
+456:    <div className={cn("p-3 rounded-lg bg-slate-800", color)}>
+457:      <Icon size={24} className="text-white" />
+460:      <p className="text-slate-400 text-sm font-medium">{title}</p>
+462:        <h3 className="text-2xl font-bold text-white">{value}</h3>
+463:        {trend && <span className="text-emerald-400 text-xs font-medium">{trend}</span>}
+469:const SectionHeader = ({ title, subtitle }: { title: string, subtitle?: string }) => (
+473:      {title}
+475:    {subtitle && <p className="text-slate-400 text-sm mt-1">{subtitle}</p>}
+483:    { lat: 40.7128, lng: -74.0060, intensity: 85, emotion: 'Anger', location: 'New York, USA' },
+484:    { lat: 55.7558, lng: 37.6173, intensity: 92, emotion: 'Fear', location: 'Moscow, Russia' },
+485:    { lat: 39.9042, lng: 116.4074, intensity: 78, emotion: 'Disgust', location: 'Beijing, China' },
+486:    { lat: 51.5074, lng: -0.1278, intensity: 45, emotion: 'Surprise', location: 'London, UK' },
+487:    { lat: -33.8688, lng: 151.2093, intensity: 30, emotion: 'Joy', location: 'Sydney, Australia' },
+488:    { lat: 28.6139, lng: 77.2090, intensity: 65, emotion: 'Fear', location: 'New Delhi, India' },
+531:        })
+536:        .text((d: any) => `${d.location}\nEmotion: ${d.emotion}\nIntensity: ${d.intensity}%`);
+537:    });
+538:  }, [hotspots]);
+560:        <svg ref={svgRef} viewBox="0 0 800 450" className="w-full h-full" />
+564:};
+569:    { id: 1, source: 'AlienVault OTX', title: 'New Ransomware Variant: LockBit 4.0', time: '2 mins ago', emotion: 'Fear', intensity: 88, link: '#' },
+570:    { id: 2, source: 'Krebs on Security', title: 'Data Breach at Major Retailer', time: '15 mins ago', emotion: 'Anger', intensity: 72, link: '#' },
+571:    { id: 3, source: 'Threatpost', title: 'Zero-day in Chrome Patched', time: '1 hour ago', emotion: 'Surprise', intensity: 45, link: '#' },
+572:    { id: 4, source: 'DarkReading', title: 'Phishing Campaign Targeting HR', time: '3 hours ago', emotion: 'Disgust', intensity: 58, link: '#' },
+577:      { id: feeds.length + 1, source: 'BleepingComputer', title: 'New Botnet "Mirai-X" spreading via IoT', time: 'Just now', emotion: 'Surprise', intensity: 65, link: '#' },
+578:      { id: feeds.length + 2, source: 'SANS ISC', title: 'Anomalous traffic on port 445', time: 'Just now', emotion: 'Neutral', intensity: 30, link: '#' },
+581:  };
+590:              key={feed.id}
+591:              initial={{ opacity: 0, height: 0 }}
+592:              animate={{ opacity: 1, height: 'auto' }}
+600:                )}>
+601:                  <Radio size={20} className="animate-pulse" />
+605:                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{feed.source}</span>
+607:                    <span className="text-[10px] text-slate-500">{feed.time}</span>
+609:                  <h4 className="text-sm font-bold text-white group-hover:text-indigo-400 transition-colors">{feed.title}</h4>
+619:                  )}>{feed.emotion} ({feed.intensity}%)</div>
+621:                <ChevronRight size={18} className="text-slate-700 group-hover:text-indigo-500 transition-all" />
+624:          ))}
+628:        onClick={handleLoadMore}
+635:};
+650:    { id: 1, type: 'Aggression', threshold: 80, active: true, lastTriggered: '2026-04-14 10:30' },
+651:    { id: 2, type: 'Fear', threshold: 75, active: true, lastTriggered: 'Never' },
+654:    { id: 1, author: 'Analyst_Alpha', avatar: 'A', content: 'The emotional subtext in the recent ShadowLock leak suggests a state-sponsored actor rather than a typical criminal group.', time: '2 hours ago', upvotes: 12, comments: 4 },
+655:    { id: 2, author: 'CTI_Expert', avatar: 'C', content: 'Agreed. The lack of "Joy" or "Excitement" in their manifestos points to a more professional, strategic intent.', time: '5 hours ago', upvotes: 8, comments: 2 },
+673:    });
+675:  }, []);
+681:    } catch (error) {
+683:    }
+684:  };
+689:  };
+695:      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+697:    });
+699:  }, [user]);
+716:      });
+717:    } catch (error) {
+719:    } finally {
+721:    }
+722:  };
+727:    } catch (error) {
+729:    }
+730:  };
+741:        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+745:          Dataset 1: ${dataset1.name} (${dataset1.description})
+746:          Dataset 2: ${dataset2.name} (${dataset2.description})
+757:                value: { type: Type.STRING },
+758:                gaps: { type: Type.STRING },
+759:                useCase: { type: Type.STRING }
+760:              },
+762:            }
+763:          }
+764:        });
+768:        }
+769:      }
+770:    } catch (error) {
+772:    } finally {
+774:    }
+775:  };
+782:    }));
+783:  }, []);
+796:    };
+797:  }, [processedTweets]);
+800:    const counts = { Negative: 0, Neutral: 0, Positive: 0 };
+803:      { name: 'Negative', value: counts.Negative, color: '#ef4444' },
+804:      { name: 'Neutral', value: counts.Neutral, color: '#94a3b8' },
+805:      { name: 'Positive', value: counts.Positive, color: '#22c55e' },
+807:  }, [processedTweets]);
+811:  }, []);
+822:        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+825:          contents: `Translate the following text to English for CTI analysis. Maintain the original tone and emotional subtext: "${analysisText}"`,
+826:        });
+829:        }
+830:      }
+839:      };
+846:        return { ...e, A: Math.min(150, Math.floor(e.A * weight)) };
+847:      });
+852:        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+855:          contents: `Analyze this threat actor communication based on CTI principles and underground forum slang: "${textToAnalyze}". 
+867:                profile: { type: Type.STRING },
+868:                emotions: { type: Type.STRING },
+869:                intent: { type: Type.STRING },
+870:                countermeasures: { type: Type.STRING },
+871:                slangDecoded: { type: Type.STRING }
+872:              },
+874:            }
+875:          }
+876:        });
+880:        }
+881:      }
+890:      });
+899:      }
+900:    } catch (error) {
+910:        },
+912:      });
+913:    } finally {
+915:    }
+916:  };
+922:    const fileName = `CyberSense_Analysis_Report_${timestamp}.txt`;
+926:Generated on: ${new Date().toLocaleString()}
+927:Source Text: "${analysisText}"
+931:Overall Sentiment: ${analysisResult.sentiment}
+932:Polarity Score: ${analysisResult.polarity}
+933:Subjectivity Score: ${analysisResult.subjectivity}
+934:Cyber Relevance: ${analysisResult.isCyberRelevant ? 'YES' : 'NO'}
+938:${analysisResult.emotions.map((e: any) => `${e.subject}: ${e.A}`).join('\n')}
+942:Actor Motivation: ${analysisResult.insights.motivation}
+943:Public Reaction: ${analysisResult.insights.publicReaction}
+944:Psychological Impact: ${analysisResult.insights.psychologicalImpact}
+952:${analysisResult.aiReport.profile}
+955:${analysisResult.aiReport.intent}
+958:${analysisResult.aiReport.emotions}
+961:${analysisResult.aiReport.countermeasures}
+963:    }
+965:    const blob = new Blob([reportContent], { type: 'text/plain' });
+974:  };
+983:    };
+985:  };
+997:    };
+1000:  };
+1005:      id: `bundle--${crypto.randomUUID()}`,
+1009:          id: `indicator--${crypto.randomUUID()}`,
+1013:          description: `Analysis of: ${analysisText}`,
+1023:            }
+1029:          }
+1030:        }
+1032:    };
+1034:    const blob = new Blob([JSON.stringify(stixReport, null, 2)], { type: 'application/json' });
+1038:    link.download = `CyberSense_STIX_Report_${new Date().getTime()}.json`;
+1043:  };
+1049:          initial={{ opacity: 0, y: 20 }}
+1050:          animate={{ opacity: 1, y: 0 }}
+1055:              <Shield size={32} className="text-white" />
+1063:              onClick={handleGoogleLogin}
+1076:                })}
+1086:  }
+1090:      {/* Sidebar */}
+1094:            <Shield className="text-white" size={24} />
+1101:            onClick={() => setActiveTab('dashboard')}
+1105:            )}
+1107:            <Activity size={20} />
+1111:            onClick={() => setActiveTab('datasets')}
+1115:            )}
+1117:            <Database size={20} />
+1121:            onClick={() => setActiveTab('analysis')}
+1125:            )}
+1127:            <BrainCircuit size={20} />
+1131:            onClick={() => setActiveTab('comparison')}
+1135:            )}
+1137:            <Zap size={20} />
+1146:            onClick={() => setActiveTab('heatmap')}
+1150:            )}
+1152:            <Map size={20} />
+1156:            onClick={() => setActiveTab('alerts')}
+1160:            )}
+1162:            <Bell size={20} />
+1166:            onClick={() => setActiveTab('collaboration')}
+1170:            )}
+1172:            <Users size={20} />
+1176:            onClick={() => setActiveTab('darkweb')}
+1180:            )}
+1182:            <Terminal size={20} />
+1187:            onClick={() => setActiveTab('chatbot')}
+1191:            )}
+1193:            <MessageSquare size={20} />
+1197:            onClick={() => setActiveTab('storage')}
+1201:            )}
+1203:            <Cloud size={20} />
+1212:                <img src={user.photoURL} alt={user.displayName} className="w-8 h-8 rounded-full" />
+1215:                  {user.displayName?.charAt(0) || 'A'}
+1217:              )}
+1219:                <p className="text-xs font-bold text-white truncate">{user.displayName || 'Analyst'}</p>
+1220:                <button onClick={handleLogout} className="text-[10px] text-indigo-400 hover:underline flex items-center gap-1">
+1221:                  <LogOut size={10} /> Sign Out
+1227:              onClick={() => setShowLogin(true)}
+1232:          )}
+1243:      {/* Main Content */}
+1245:        {/* Header */}
+1249:              {activeTab === 'dashboard' && "Intelligence Overview"}
+1250:              {activeTab === 'datasets' && "Dataset Explorer"}
+1251:              {activeTab === 'analysis' && "Emotion-Aware Sentiment Analysis"}
+1252:              {activeTab === 'comparison' && "Threat Categorization & Comparison"}
+1253:              {activeTab === 'chatbot' && "Cyber Intelligence Chatbot"}
+1259:              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
+1267:              <Globe size={20} />
+1273:          {/* Dashboard Tab */}
+1277:              initial={{ opacity: 0, y: 10 }}
+1278:              animate={{ opacity: 1, y: 0 }}
+1279:              exit={{ opacity: 0, y: -10 }}
+1283:                <StatCard title="Corpus C Size" value={stats.corpusSize.toString()} icon={Activity} color="bg-indigo-500" />
+1284:                <StatCard title="H-Set (Cyber)" value={stats.hSetSize.toString()} icon={Shield} color="bg-rose-500" />
+1285:                <StatCard title="B-Set (Other)" value={stats.bSetSize.toString()} icon={Globe} color="bg-slate-700" />
+1286:                <StatCard title="Outliers Detected" value={stats.outliersCount.toString()} icon={AlertTriangle} color="bg-amber-500" />
+1290:                {/* Research Context */}
+1296:                        <Shield size={14} />
+1305:                        <Database size={14} />
+1314:                        <TrendingUp size={14} />
+1324:                {/* Subjectivity vs Polarity Scatter Plot (Figure 4) */}
+1329:                      <LineChart data={processedTweets}>
+1331:                        <XAxis dataKey="polarity" type="number" domain={[-1, 1]} tick={{ fill: '#94a3b8' }} label={{ value: 'Polarity', position: 'bottom', fill: '#94a3b8' }} />
+1332:                        <YAxis dataKey="subjectivity" type="number" domain={[0, 1]} tick={{ fill: '#94a3b8' }} label={{ value: 'Subjectivity', angle: -90, position: 'left', fill: '#94a3b8' }} />
+1333:                        <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b' }} />
+1335:                          const { cx, cy, payload } = props;
+1339:                              cx={cx} 
+1340:                              cy={cy} 
+1341:                              r={isOutlier ? 6 : 4} 
+1342:                              fill={isOutlier ? '#ef4444' : '#6366f1'} 
+1343:                              stroke={isOutlier ? '#fff' : 'none'}
+1346:                        }} />
+1352:                {/* Frequent Markers (Ψf) */}
+1357:                      <div key={marker.word} className="flex items-center justify-between p-3 bg-slate-950 rounded-lg border border-slate-800">
+1359:                          <span className="text-indigo-500 font-mono text-xs">#{idx + 1}</span>
+1360:                          <span className="text-sm font-medium text-white">{marker.word}</span>
+1362:                        <span className="text-xs text-slate-500">{(marker.support * 100).toFixed(1)}% support</span>
+1364:                    ))}
+1368:                      <Info size={12} className="inline mr-1 mb-0.5" />
+1376:                {/* Sentiment Distribution (Table 1) */}
+1381:                      <BarChart data={sentimentDist}>
+1382:                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
+1383:                        <XAxis dataKey="name" tick={{ fill: '#94a3b8' }} />
+1384:                        <YAxis tick={{ fill: '#94a3b8' }} />
+1385:                        <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b' }} />
+1388:                            <Cell key={`cell-${index}`} fill={entry.color} />
+1389:                          ))}
+1396:              {/* Recent Alerts */}
+1404:                    { id: 1, title: 'New Ransomware Variant "ShadowLock"', time: '12 mins ago', emotion: 'Fear', level: 'Critical' },
+1405:                    { id: 2, title: 'Radicalization spike in ISIS Twitter Dataset', time: '45 mins ago', emotion: 'Anger', level: 'High' },
+1406:                    { id: 3, title: 'Anomalous Botnet traffic in CTU-13 node', time: '2 hours ago', emotion: 'Neutral', level: 'Medium' },
+1408:                    <div key={alert.id} className="p-4 flex items-center justify-between hover:bg-slate-800/30 transition-colors">
+1413:                        )}>
+1414:                          {alert.level === 'Critical' ? <AlertTriangle size={20} /> : <Info size={20} />}
+1417:                          <h4 className="text-sm font-semibold text-white">{alert.title}</h4>
+1418:                          <p className="text-xs text-slate-400">{alert.time} • Dominant Emotion: <span className="text-slate-200">{alert.emotion}</span></p>
+1424:                      )}>
+1425:                        {alert.level}
+1428:                  ))}
+1433:        )}
+1435:          {/* Datasets Tab */}
+1439:              initial={{ opacity: 0, x: 20 }}
+1440:              animate={{ opacity: 1, x: 0 }}
+1441:              exit={{ opacity: 0, x: -20 }}
+1448:                      key={dataset.id}
+1449:                      whileHover={{ y: -4 }}
+1454:                          {dataset.type === 'Social Media' && <MessageSquare size={24} />}
+1455:                          {dataset.type === 'Network Traffic' && <Zap size={24} />}
+1456:                          {dataset.type === 'Reports' && <FileText size={24} />}
+1457:                          {dataset.type === 'Events' && <Globe size={24} />}
+1458:                          {dataset.type === 'Metadata' && <Database size={24} />}
+1461:                          {dataset.type}
+1464:                      <h3 className="text-lg font-bold text-white mb-2">{dataset.name}</h3>
+1466:                        {dataset.description}
+1471:                          <span className="text-slate-200 font-medium">{dataset.size}</span>
+1475:                          <span className="text-slate-200 font-medium text-right max-w-[150px]">{dataset.relevance}</span>
+1479:                        onClick={() => setSelectedDatasetId(dataset.id)}
+1482:                        Explore Data <ChevronRight size={16} />
+1485:                  ))}
+1490:                    onClick={() => setSelectedDatasetId(null)}
+1493:                    <ChevronRight size={16} className="rotate-180" /> Back to Datasets
+1504:                              <h2 className="text-2xl font-bold text-white mb-1">{dataset.name}</h2>
+1505:                              <p className="text-slate-400 text-sm">{dataset.description}</p>
+1509:                                {dataset.type}
+1512:                                {dataset.size}
+1522:                                  <div key={record.id} className="bg-slate-950 border border-slate-800 rounded-xl p-4 hover:border-indigo-500/50 transition-colors group">
+1524:                                      <span className="text-[10px] font-mono text-indigo-500 bg-indigo-500/5 px-1.5 py-0.5 rounded">ID: {record.id}</span>
+1528:                                            {record.label}
+1530:                                        )}
+1537:                                          )}>
+1538:                                            {record.sentiment}
+1540:                                        )}
+1544:                                      {record.content}
+1547:                                ))}
+1555:                                  {dataset.relevance}
+1560:                                      <Shield size={16} />
+1569:                                      <Activity size={16} />
+1580:                                <BrainCircuit className="mb-4" size={32} />
+1586:                                  onClick={() => setActiveTab('analysis')}
+1597:                  })()}
+1599:              )}
+1601:          )}
+1603:          {/* Analysis Tab */}
+1607:              initial={{ opacity: 0, scale: 0.95 }}
+1608:              animate={{ opacity: 1, scale: 1 }}
+1609:              exit={{ opacity: 0, scale: 0.95 }}
+1618:                      <Languages size={14} className="text-indigo-400" />
+1620:                        value={targetLanguage}
+1621:                        onChange={(e) => setTargetLanguage(e.target.value)}
+1634:                    value={analysisText}
+1635:                    onChange={(e) => setAnalysisText(e.target.value)}
+1642:                        onClick={() => setAnalysisText('We will make them pay for their interference. Our vengeance will be swift and digital.')}
+1648:                        onClick={() => setAnalysisText('The system has been compromised. We are seeing massive data exfiltration across all nodes.')}
+1655:                      onClick={handleAnalyze}
+1656:                      disabled={isAnalyzing || !analysisText}
+1660:                      )}
+1669:                          <Zap size={18} />
+1672:                      )}
+1682:                      onClick={handleExportSTIX}
+1685:                      <Share2 size={18} className="text-emerald-400" />
+1689:                      onClick={handleExportReport}
+1692:                      <FileText size={18} className="text-indigo-400" />
+1697:                    initial={{ opacity: 0, y: 20 }}
+1698:                    animate={{ opacity: 1, y: 0 }}
+1703:                        <Activity size={20} className="text-indigo-500" />
+1712:                          )}>
+1713:                            {analysisResult.sentiment}
+1718:                          <span className="text-white font-mono">{analysisResult.score}</span>
+1725:                          )}>
+1726:                            {analysisResult.threatLevel}
+1734:                        <Ghost size={20} className="text-indigo-500" />
+1739:                          <RadarChart cx="50%" cy="50%" outerRadius="80%" data={analysisResult.emotions || EMOTION_RADAR}>
+1741:                            <PolarAngleAxis dataKey="subject" tick={{ fill: '#94a3b8', fontSize: 10 }} />
+1742:                            <PolarRadiusAxis angle={30} domain={[0, 150]} tick={false} axisLine={false} />
+1748:                              fillOpacity={0.5}
+1751:                              contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
+1752:                              itemStyle={{ color: '#f8fafc' }}
+1759:                          <div key={item.subject} className="flex items-center gap-1.5">
+1761:                            <span className="text-[10px] text-slate-400 uppercase tracking-wider">{item.subject}</span>
+1763:                        ))}
+1769:                        <BrainCircuit size={20} className="text-indigo-500" />
+1775:                          <span className="text-white font-mono">{analysisResult.polarity}</span>
+1779:                          <span className="text-white font-mono">{analysisResult.subjectivity}</span>
+1786:                          )}>
+1787:                            {analysisResult.isCyberRelevant ? 'YES' : 'NO'}
+1795:                    initial={{ opacity: 0, y: 10 }}
+1796:                    animate={{ opacity: 1, y: 0 }}
+1800:                      <Info size={20} className="text-indigo-500" />
+1806:                          <TrendingUp size={14} /> Actor Motivation
+1808:                        <p className="text-sm text-slate-300 leading-relaxed">{analysisResult.insights.motivation}</p>
+1812:                          <Globe size={14} /> Public Reaction
+1814:                        <p className="text-sm text-slate-300 leading-relaxed">{analysisResult.insights.publicReaction}</p>
+1818:                          <Activity size={14} /> Psychological Impact
+1820:                        <p className="text-sm text-slate-300 leading-relaxed">{analysisResult.insights.psychologicalImpact}</p>
+1827:                          <Shield size={20} className="text-emerald-500" />
+1834:                              <p className="text-sm text-slate-300 bg-slate-950/30 p-4 rounded-xl border border-slate-800/50">{analysisResult.aiReport.profile}</p>
+1838:                              <p className="text-sm text-slate-300 bg-slate-950/30 p-4 rounded-xl border border-slate-800/50">{analysisResult.aiReport.intent}</p>
+1844:                              <p className="text-sm text-slate-300 bg-slate-950/30 p-4 rounded-xl border border-slate-800/50">{analysisResult.aiReport.emotions}</p>
+1848:                              <p className="text-sm text-slate-300 bg-slate-950/30 p-4 rounded-xl border border-slate-800/50">{analysisResult.aiReport.countermeasures}</p>
+1853:                                  <Terminal size={14} /> Slang/Jargon Decoded
+1856:                                  {analysisResult.aiReport.slangDecoded}
+1859:                            )}
+1863:                    )}
+1866:              )}
+1868:          )}
+1870:          {/* Comparison Tab */}
+1874:              initial={{ opacity: 0, y: 10 }}
+1875:              animate={{ opacity: 1, y: 0 }}
+1876:              exit={{ opacity: 0, y: -10 }}
+1884:                      <BarChart data={THREAT_CATEGORIES} layout="vertical">
+1885:                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
+1886:                        <XAxis type="number" domain={[0, 100]} hide />
+1887:                        <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fill: '#f8fafc', fontSize: 12 }} width={100} />
+1889:                          cursor={{ fill: '#1e293b' }}
+1890:                          contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
+1891:                          itemStyle={{ color: '#f8fafc' }}
+1893:                        <Bar dataKey="intensity" radius={[0, 4, 4, 0]}>
+1895:                            <Cell key={`cell-${index}`} fill={THREAT_LEVEL_COLORS[entry.level]} />
+1896:                          ))}
+1905:                    <div key={category.id} className="bg-slate-900/50 border border-slate-800 rounded-xl p-4">
+1909:                            {category.name}
+1916:                            )}>
+1917:                              {category.level}
+1922:                            <span className="text-xs font-semibold text-indigo-400">{category.dominantEmotion}</span>
+1926:                          <span className="text-xs font-mono text-slate-500">{category.intensity}% Intensity</span>
+1930:                        {category.description}
+1940:                          )} style={{ width: `${category.intensity}%` }} />
+1944:                  ))}
+1954:                      value={compareDataset1}
+1955:                      onChange={(e) => setCompareDataset1(e.target.value)}
+1958:                      {DATASETS.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+1964:                          <span className="text-xs font-bold text-indigo-400">{dataset1.type}</span>
+1968:                          <span className="text-xs font-bold text-white">{dataset1.size}</span>
+1972:                          <p className="text-xs text-slate-300 leading-relaxed">{dataset1.relevance}</p>
+1975:                    )}
+1981:                      value={compareDataset2}
+1982:                      onChange={(e) => setCompareDataset2(e.target.value)}
+1985:                      {DATASETS.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+1991:                          <span className="text-xs font-bold text-emerald-400">{dataset2.type}</span>
+1995:                          <span className="text-xs font-bold text-white">{dataset2.size}</span>
+1999:                          <p className="text-xs text-slate-300 leading-relaxed">{dataset2.relevance}</p>
+2002:                    )}
+2008:                    onClick={handleCompareDatasets}
+2009:                    disabled={isComparing}
+2014:                        <Loader2 size={18} className="animate-spin" />
+2019:                        <BrainCircuit size={18} />
+2022:                    )}
+2028:                    initial={{ opacity: 0, scale: 0.98 }}
+2029:                    animate={{ opacity: 1, scale: 1 }}
+2033:                      <Zap size={16} /> AI Comparative Intelligence
+2038:                        <p className="text-sm text-slate-300 leading-relaxed">{comparisonReport.value}</p>
+2042:                        <p className="text-sm text-slate-300 leading-relaxed">{comparisonReport.gaps}</p>
+2046:                        <p className="text-sm text-slate-300 leading-relaxed">{comparisonReport.useCase}</p>
+2050:                )}
+2066:                            <div className="h-full bg-rose-500" style={{ width: '45%' }} />
+2075:                            <div className="h-full bg-rose-400" style={{ width: '62%' }} />
+2084:                            <div className="h-full bg-rose-600" style={{ width: '78%' }} />
+2099:                    <div key={level} className="flex items-center gap-2">
+2100:                      <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+2101:                      <span className="text-xs font-medium text-slate-300">{level}</span>
+2103:                  ))}
+2113:                <Skull className="mx-auto text-slate-700 mb-4" size={48} />
+2134:          )}
+2136:          {/* Chatbot Tab */}
+2140:              initial={{ opacity: 0, y: 10 }}
+2141:              animate={{ opacity: 1, y: 0 }}
+2142:              exit={{ opacity: 0, y: -10 }}
+2147:          )}
+2149:          {/* Storage Tab */}
+2153:              initial={{ opacity: 0, y: 10 }}
+2154:              animate={{ opacity: 1, y: 0 }}
+2155:              exit={{ opacity: 0, y: -10 }}
+2160:                  <Lock className="mx-auto text-indigo-500 mb-6" size={48} />
+2166:                    onClick={() => setShowLogin(true)}
+2175:                    <StatCard title="Total Storage" value="2.4 GB" icon={HardDrive} color="bg-indigo-500/10 text-indigo-500" />
+2176:                    <StatCard title="Files Uploaded" value={uploads.length.toString()} icon={FileText} color="bg-emerald-500/10 text-emerald-500" />
+2177:                    <StatCard title="Cloud Status" value="Healthy" icon={Cloud} color="bg-sky-500/10 text-sky-500" />
+2189:                            <Loader2 size={20} className="animate-spin" />
+2194:                            <Upload size={20} />
+2197:                        )}
+2201:                          onChange={handleFileUpload}
+2202:                          disabled={isUploading}
+2212:                          <Cloud className="mx-auto text-slate-700 mb-4" size={32} />
+2218:                            <div key={file.id} className="bg-slate-950 border border-slate-800 rounded-xl p-4 flex items-center justify-between hover:border-slate-700 transition-colors group">
+2221:                                  <FileText size={20} />
+2224:                                  <h4 className="text-sm font-bold text-white mb-0.5">{file.fileName}</h4>
+2226:                                    <span className="text-[10px] text-slate-500 uppercase font-mono">{(file.fileSize / 1024).toFixed(1)} KB</span>
+2228:                                    <span className="text-[10px] text-emerald-500 font-bold uppercase tracking-tighter">{file.status}</span>
+2230:                                    <span className="text-[10px] text-slate-500">{file.createdAt?.toDate().toLocaleDateString()}</span>
+2235:                                onClick={() => handleDeleteUpload(file.id)}
+2238:                                <Trash2 size={18} />
+2241:                          ))}
+2243:                      )}
+2249:                      <Info size={20} />
+2259:              )}
+2261:          )}
+2263:          {/* Heatmap Tab */}
+2267:              initial={{ opacity: 0, y: 10 }}
+2268:              animate={{ opacity: 1, y: 0 }}
+2269:              exit={{ opacity: 0, y: -10 }}
+2279:                      { region: 'North America', intensity: 45, emotion: 'Neutral', color: 'bg-indigo-500' },
+2280:                      { region: 'Eastern Europe', intensity: 92, emotion: 'Fear', color: 'bg-orange-500' },
+2281:                      { region: 'East Asia', intensity: 78, emotion: 'Anger', color: 'bg-rose-500' },
+2282:                      { region: 'Western Europe', intensity: 35, emotion: 'Surprise', color: 'bg-amber-500' },
+2284:                      <div key={r.region} className="space-y-2">
+2286:                          <span className="text-sm font-bold text-white">{r.region}</span>
+2287:                          <span className="text-xs text-slate-400">{r.emotion} ({r.intensity}%)</span>
+2290:                          <div className={cn("h-full", r.color)} style={{ width: `${r.intensity}%` }} />
+2293:                    ))}
+2298:          )}
+2300:          {/* Alerts Tab */}
+2304:              initial={{ opacity: 0, y: 10 }}
+2305:              animate={{ opacity: 1, y: 0 }}
+2306:              exit={{ opacity: 0, y: -10 }}
+2314:                    <div key={alert.id} className="bg-slate-950 border border-slate-800 rounded-xl p-6 space-y-4">
+2318:                            <Bell size={20} />
+2321:                            <h4 className="font-bold text-white">{alert.type} Threshold</h4>
+2322:                            <p className="text-[10px] text-slate-500 uppercase tracking-widest">Last Triggered: {alert.lastTriggered}</p>
+2326:                          <div className={cn("w-2 h-2 rounded-full", alert.active ? "bg-emerald-500" : "bg-slate-700")} />
+2327:                          <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{alert.active ? 'Active' : 'Disabled'}</span>
+2334:                          <span className="text-white font-mono">{alert.threshold}%</span>
+2340:                          value={alert.threshold}
+2341:                          onChange={(e) => setAlerts(alerts.map(a => a.id === alert.id ? { ...a, threshold: parseInt(e.target.value) } : a))}
+2349:                          <Filter size={14} />
+2353:                  ))}
+2355:                    onClick={handleAddAlert}
+2358:                    <Zap size={24} />
+2364:          )}
+2366:          {/* Collaboration Tab */}
+2370:              initial={{ opacity: 0, y: 10 }}
+2371:              animate={{ opacity: 1, y: 0 }}
+2372:              exit={{ opacity: 0, y: -10 }}
+2381:                        <div key={post.id} className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-4">
+2384:                              <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-xs">{post.avatar}</div>
+2386:                                <h4 className="text-sm font-bold text-white">{post.author}</h4>
+2387:                                <p className="text-[10px] text-slate-500 uppercase tracking-widest">{post.time}</p>
+2390:                            <button className="text-slate-500 hover:text-white transition-colors"><Share2 size={16} /></button>
+2392:                          <p className="text-sm text-slate-300 leading-relaxed">{post.content}</p>
+2395:                              <ThumbsUp size={14} /> {post.upvotes}
+2398:                              <MessageCircle size={14} /> {post.comments}
+2402:                      ))}
+2406:                        value={newComment}
+2407:                        onChange={(e) => setNewComment(e.target.value)}
+2413:                          onClick={handleAddComment}
+2426:                      <Users size={18} className="text-indigo-500" />
+2431:                        { name: 'Analyst_Alpha', status: 'Online', role: 'Senior Auditor' },
+2432:                        { name: 'CTI_Expert', status: 'Online', role: 'Threat Hunter' },
+2433:                        { name: 'Cyber_Sentinel', status: 'Away', role: 'Security Analyst' },
+2435:                        <div key={a.name} className="flex items-center justify-between">
+2439:                              <p className="text-xs font-bold text-white">{a.name}</p>
+2440:                              <p className="text-[10px] text-slate-500">{a.role}</p>
+2444:                            <MessageSquare size={14} />
+2447:                      ))}
+2453:          )}
+2455:          {/* Dark Web Tab */}
+2459:              initial={{ opacity: 0, y: 10 }}
+2460:              animate={{ opacity: 1, y: 0 }}
+2461:              exit={{ opacity: 0, y: -10 }}
+2467:                    <Terminal size={12} className="text-rose-500" />
+2483:                      value={analysisText}
+2484:                      onChange={(e) => setAnalysisText(e.target.value)}
+2492:                          onClick={() => setAnalysisText('Selling fresh logs from major US bank. 10k+ records. No lowballers. Escrow only.')}
+2498:                          onClick={() => setAnalysisText('Need a reliable FUD crypter for my latest payload. Willing to pay top dollar.')}
+2505:                        onClick={handleAnalyze}
+2506:                        disabled={isAnalyzing || !analysisText}
+2510:                          <Loader2 size={18} className="animate-spin" />
+2512:                          <Skull size={18} />
+2513:                        )}
+2524:                          { term: 'FUD', meaning: 'Fully Undetectable' },
+2525:                          { term: 'Logs', meaning: 'Stolen credentials/data' },
+2526:                          { term: 'Crypter', meaning: 'Tool to hide malware' },
+2527:                          { term: 'Escrow', meaning: 'Trusted third-party payment' },
+2528:                          { term: 'Payload', meaning: 'Malicious part of malware' },
+2530:                          <div key={s.term} className="flex justify-between items-center p-2 bg-slate-900 rounded border border-slate-800">
+2531:                            <span className="text-xs font-bold text-white font-mono">{s.term}</span>
+2532:                            <span className="text-[10px] text-slate-500">{s.meaning}</span>
+2534:                        ))}
+2541:          )}
+2545:      {/* Footer */}
+2553:}

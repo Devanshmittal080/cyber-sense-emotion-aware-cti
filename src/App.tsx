@@ -11,10 +11,17 @@ import {
   Zap,
   Globe,
   Lock,
+  Mail,
+  Eye,
+  EyeOff,
   FileText,
   ChevronRight,
   Info,
   TrendingUp,
+  History,
+  ShieldCheck,
+  UserCheck,
+  UserCircle,
   Skull,
   Ghost,
   Frown,
@@ -27,8 +34,22 @@ import {
   Phone,
   Smartphone,
   Key,
-  LogOut
+  LogOut,
+  Bell,
+  Map,
+  Users,
+  Languages,
+  Radio,
+  Terminal,
+  Share2,
+  Download,
+  MessageCircle,
+  ThumbsUp,
+  Clock,
+  ExternalLink,
+  Filter
 } from 'lucide-react';
+import * as d3 from 'd3';
 import { 
   BarChart, 
   Bar, 
@@ -57,7 +78,16 @@ import { twMerge } from 'tailwind-merge';
 
 // --- Firebase Initialization ---
 import { initializeApp as initFirebase } from 'firebase/app';
-import { getAuth, onAuthStateChanged, signInWithPopup, GoogleAuthProvider, signOut, RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from 'firebase/auth';
+import { 
+  getAuth, 
+  onAuthStateChanged, 
+  signInWithPopup, 
+  GoogleAuthProvider, 
+  signOut,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+  updateProfile
+} from 'firebase/auth';
 import { getFirestore, collection, addDoc, onSnapshot, query, orderBy, deleteDoc, doc, serverTimestamp } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -430,25 +460,126 @@ const THREAT_CATEGORIES: ThreatCategory[] = [
   { id: '3', name: 'Botnet Traffic', sentiment: 'Neutral', dominantEmotion: 'Neutral', intensity: 12, level: 'Low', description: 'Automated traffic tends to be emotionally neutral and technical (Section 4).' },
   { id: '4', name: 'APT Activity', sentiment: 'Negative', dominantEmotion: 'Anger/Fear', intensity: 92, level: 'Critical', description: 'Targeted attacks exhibit significantly higher emotional intensity in reports (Section 4).' },
   { id: '5', name: 'Social Engineering', sentiment: 'Negative', dominantEmotion: 'Trust/Deception', intensity: 45, level: 'Medium', description: 'Psychological manipulation that exploits human trust, showing moderate emotional complexity.' },
+  { id: '6', name: 'Insider Threat', sentiment: 'Negative', dominantEmotion: 'Betrayal', intensity: 78, level: 'High', description: 'Internal actors cause high stress due to breached organizational trust.' },
+  { id: '7', name: 'Supply Chain', sentiment: 'Neutral', dominantEmotion: 'Uncertainty', intensity: 88, level: 'Critical', description: 'Downstream effects from compromised vendors create massive sector-wide fear.' },
+  { id: '8', name: 'DDoS Attack', sentiment: 'Negative', dominantEmotion: 'Frustration', intensity: 35, level: 'Medium', description: 'Service unavailability leads to high frustration but lower long-term fear.' },
 ];
 
 // --- Components ---
 
-const StatCard = ({ title, value, icon: Icon, trend, color }: { title: string, value: string, icon: any, trend?: string, color?: string }) => (
-  <motion.div 
-    whileHover={{ y: -2 }}
-    className="bg-slate-900/50 border border-slate-800 p-5 rounded-xl flex items-center gap-4"
-  >
-    <div className={cn("p-3 rounded-lg bg-slate-800", color)}>
-      <Icon size={24} className="text-white" />
-    </div>
-    <div>
-      <p className="text-slate-400 text-sm font-medium">{title}</p>
-      <div className="flex items-baseline gap-2">
-        <h3 className="text-2xl font-bold text-white">{value}</h3>
-        {trend && <span className="text-emerald-400 text-xs font-medium">{trend}</span>}
+const Sparkline = ({ data, color }: { data: number[], color: string }) => (
+  <div className="h-10 w-24">
+    <ResponsiveContainer width="100%" height="100%">
+      <AreaChart data={data.map(v => ({ v }))}>
+        <Area type="monotone" dataKey="v" stroke={color} fill={color} fillOpacity={0.1} strokeWidth={2} isAnimationActive={false} />
+      </AreaChart>
+    </ResponsiveContainer>
+  </div>
+);
+
+const RiskGauge = ({ value }: { value: number }) => {
+  const rotation = (value / 100) * 180 - 90;
+  return (
+    <div className="relative w-48 h-24 overflow-hidden mx-auto mt-4">
+      <div className="absolute inset-0 border-[12px] border-slate-800 rounded-t-full" />
+      <div 
+        className="absolute inset-0 border-[12px] rounded-t-full border-t-indigo-500 border-r-indigo-500 transition-all duration-1000"
+        style={{ 
+          borderColor: value > 75 ? '#ef4444' : value > 40 ? '#f59e0b' : '#10b981',
+          clipPath: `inset(0 0 0 ${100 - (value / 2)}%)`,
+          transform: `rotate(${rotation}deg)`,
+          transformOrigin: 'bottom center'
+        }}
+      />
+      <div className="absolute bottom-0 left-0 right-0 text-center">
+        <span className="text-3xl font-black text-white">{value}</span>
+        <span className="text-[10px] text-slate-500 uppercase block font-bold">Threat Index</span>
       </div>
     </div>
+  );
+};
+
+const LiveActivityFeed = () => {
+  const [activities, setActivities] = useState([
+    { id: 1, type: 'DETECT', msg: 'Anomalous traffic detected on Node-14', time: '12s ago', level: 'HIGH' },
+    { id: 2, type: 'PROCESS', msg: 'Dataset C-102 analysis complete', time: '45s ago', level: 'INFO' },
+    { id: 3, type: 'ALERT', msg: 'Ransomware keyword triggered on Alert Rule #2', time: '1m ago', level: 'CRITICAL' },
+    { id: 4, type: 'SYNC', msg: 'Intelligence sync with Dark Web monitor successful', time: '5m ago', level: 'INFO' },
+  ]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const types = ['DETECT', 'PROCESS', 'ALERT', 'SYNC'];
+      const levels = ['INFO', 'HIGH', 'CRITICAL'];
+      const msgs = [
+        'Brute force attempt blocked on port 22',
+        'New CTI report ingested from external source',
+        'Subjectivity spike detected in radicalized corpus',
+        'Credential leak identified in underground forum',
+        'API endpoint accessed by unknown agent'
+      ];
+      const newAct = {
+        id: Date.now(),
+        type: types[Math.floor(Math.random() * types.length)],
+        msg: msgs[Math.floor(Math.random() * msgs.length)],
+        time: 'Just now',
+        level: levels[Math.floor(Math.random() * levels.length)]
+      };
+      setActivities(prev => [newAct, ...prev.slice(0, 5)]);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="space-y-3">
+      {activities.map(act => (
+        <motion.div 
+          key={act.id} 
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
+          className="flex items-center gap-4 p-3 bg-slate-950/50 border border-slate-800 rounded-xl hover:bg-slate-900 transition-colors"
+        >
+          <div className={cn(
+            "w-2 h-2 rounded-full",
+            act.level === 'CRITICAL' ? "bg-rose-500 shadow-[0_0_8px_#f43f5e]" : 
+            act.level === 'HIGH' ? "bg-amber-500 shadow-[0_0_8px_#f59e0b]" : "bg-indigo-500"
+          )} />
+          <div className="flex-1">
+            <div className="flex justify-between items-center mb-0.5">
+              <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{act.type}</span>
+              <span className="text-[9px] text-slate-600 font-mono">{act.time}</span>
+            </div>
+            <p className="text-xs text-slate-300 font-medium truncate">{act.msg}</p>
+          </div>
+        </motion.div>
+      ))}
+    </div>
+  );
+};
+
+const StatCard = ({ title, value, icon: Icon, trend, color, sparkData }: { title: string, value: string, icon: any, trend?: string, color?: string, sparkData?: number[] }) => (
+  <motion.div 
+    whileHover={{ y: -2, scale: 1.02 }}
+    className="bg-slate-900/60 backdrop-blur-md border border-slate-800 p-5 rounded-2xl flex items-center justify-between gap-4 group transition-all hover:bg-slate-800/80 hover:border-slate-700 shadow-lg shadow-black/20"
+  >
+    <div className="flex items-center gap-4">
+      <div className={cn("p-3 rounded-xl bg-slate-800 transition-colors group-hover:bg-slate-700", color)}>
+        <Icon size={24} />
+      </div>
+      <div>
+        <p className="text-slate-500 text-[10px] uppercase font-bold tracking-widest mb-1">{title}</p>
+        <div className="flex items-baseline gap-2">
+          <h3 className="text-2xl font-bold text-white tracking-tighter">{value}</h3>
+          {trend && (
+            <div className={cn("flex items-center text-[10px] font-bold px-1.5 py-0.5 rounded", trend.startsWith('+') ? "text-emerald-400 bg-emerald-400/10" : "text-rose-400 bg-rose-400/10")}>
+              {trend.startsWith('+') ? <TrendingUp size={10} className="mr-1" /> : <TrendingUp size={10} className="mr-1 rotate-180" />}
+              {trend}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+    {sparkData && <Sparkline data={sparkData} color={color?.split(' ')[1] === 'text-rose-500' ? '#ef4444' : color?.split(' ')[1] === 'text-amber-500' ? '#f59e0b' : '#6366f1'} />}
   </motion.div>
 );
 
@@ -462,8 +593,218 @@ const SectionHeader = ({ title, subtitle }: { title: string, subtitle?: string }
   </div>
 );
 
+// --- Global Heatmap Component ---
+const GlobalHeatmap = () => {
+  const svgRef = React.useRef<SVGSVGElement>(null);
+  const tooltipRef = React.useRef<HTMLDivElement>(null);
+  const [hotspots, setHotspots] = useState([
+    { lat: 40.7128, lng: -74.0060, intensity: 85, emotion: 'Anger', location: 'New York, USA', threatType: 'Financial Sector Ransomware', source: 'DarkNet Monitor' },
+    { lat: 55.7558, lng: 37.6173, intensity: 92, emotion: 'Fear', location: 'Moscow, Russia', threatType: 'APT Activity (CozyBear)', source: 'FSB Sourced Leak' },
+    { lat: 39.9042, lng: 116.4074, intensity: 78, emotion: 'Disgust', location: 'Beijing, China', threatType: 'Industrial Espionage', source: 'CrowdStrike Intelligence' },
+    { lat: 51.5074, lng: -0.1278, intensity: 45, emotion: 'Surprise', location: 'London, UK', threatType: '0-day Vulnerability Scan', source: 'ShadowServer' },
+    { lat: -33.8688, lng: 151.2093, intensity: 30, emotion: 'Joy', location: 'Sydney, Australia', threatType: 'White Hat Disclosure', source: 'BugCrowd' },
+    { lat: 28.6139, lng: 77.2090, intensity: 65, emotion: 'Fear', location: 'New Delhi, India', threatType: 'Banking Trojan Propagation', source: 'SecureWorks' },
+  ]);
+
+  useEffect(() => {
+    if (!svgRef.current) return;
+    const svg = d3.select(svgRef.current);
+    const width = 800;
+    const height = 450;
+    
+    svg.selectAll("*").remove();
+
+    const projection = d3.geoNaturalEarth1()
+      .scale(150)
+      .translate([width / 2, height / 2]);
+
+    const path = d3.geoPath().projection(projection);
+
+    const tooltip = d3.select(tooltipRef.current);
+
+    // Draw map (simplified)
+    d3.json("https://raw.githubusercontent.com/holtzy/D3-graph-gallery/master/DATA/world.geojson").then((data: any) => {
+      svg.append("g")
+        .selectAll("path")
+        .data(data.features)
+        .enter()
+        .append("path")
+        .attr("d", path)
+        .attr("fill", "#1e293b")
+        .attr("stroke", "#334155")
+        .attr("stroke-width", 0.5);
+
+      // Add hotspots
+      svg.append("g")
+        .selectAll("circle")
+        .data(hotspots)
+        .enter()
+        .append("circle")
+        .attr("cx", (d: any) => projection([d.lng, d.lat])![0])
+        .attr("cy", (d: any) => projection([d.lng, d.lat])![1])
+        .attr("r", (d: any) => d.intensity / 10)
+        .attr("fill", (d: any) => {
+          // Color scale: Green (0) -> Amber (50) -> Red (100)
+          if (d.intensity < 40) return "#22c55e";
+          if (d.intensity < 75) return "#f59e0b";
+          return "#ef4444";
+        })
+        .attr("fill-opacity", 0.6)
+        .attr("stroke", "#fff")
+        .attr("stroke-width", 1)
+        .style("cursor", "pointer")
+        .on("mouseover", (event: any, d: any) => {
+          d3.select(event.currentTarget)
+            .attr("fill-opacity", 0.9)
+            .attr("r", (d.intensity / 10) * 1.2);
+          
+          tooltip.transition().duration(200).style("opacity", 1);
+          tooltip.html(`
+            <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl shadow-2xl min-w-[220px]">
+              <div className="flex justify-between items-start mb-3 border-b border-slate-800 pb-2">
+                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">${d.location}</span>
+                <div className="flex flex-col items-end">
+                  <span className="text-[8px] text-slate-500 uppercase font-black tracking-tighter">Intensity</span>
+                  <span className="${d.intensity > 75 ? 'text-rose-500' : d.intensity > 40 ? 'text-amber-500' : 'text-emerald-500'} text-xl font-black font-mono leading-none">${d.intensity}%</span>
+                </div>
+              </div>
+              <div className="space-y-3">
+                <div>
+                  <p className="text-[8px] text-slate-500 uppercase font-black tracking-tighter mb-0.5">Primary Threat</p>
+                  <p className="text-xs text-white font-bold leading-tight">${d.threatType}</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <p className="text-[8px] text-slate-500 uppercase font-black tracking-tighter">Intel Source</p>
+                    <p className="text-[10px] text-indigo-300 font-medium truncate">${d.source}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[8px] text-slate-500 uppercase font-black tracking-tighter">Emotion State</p>
+                    <p className="text-[10px] text-slate-200 font-bold">${d.emotion}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          `)
+          .style("left", (event.pageX + 15) + "px")
+          .style("top", (event.pageY - 28) + "px");
+        })
+        .on("mousemove", (event: any) => {
+          tooltip
+            .style("left", (event.pageX + 15) + "px")
+            .style("top", (event.pageY - 28) + "px");
+        })
+        .on("mouseout", (event: any, d: any) => {
+          d3.select(event.currentTarget)
+            .attr("fill-opacity", 0.6)
+            .attr("r", d.intensity / 10);
+          
+          tooltip.transition().duration(500).style("opacity", 0);
+        });
+    });
+  }, [hotspots]);
+
+  return (
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 overflow-hidden relative">
+      <div ref={tooltipRef} className="fixed pointer-events-none opacity-0 z-[100] transition-opacity duration-200" />
+      <div className="flex justify-between items-center mb-6">
+        <SectionHeader title="Global Threat Intensity Heatmap" subtitle="Geographic distribution of cyber threat pressure levels." />
+        <div className="flex gap-4">
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-rose-500 shadow-[0_0_8px_rgba(244,63,94,0.4)]" />
+            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">High (75%+)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.4)]" />
+            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Med (40-75%)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(34,197,94,0.4)]" />
+            <span className="text-[10px] text-slate-400 font-bold uppercase tracking-tighter">Low (&lt;40%)</span>
+          </div>
+        </div>
+      </div>
+      <div className="relative aspect-video w-full group">
+        <div className="absolute inset-0 bg-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none rounded-xl" />
+        <svg ref={svgRef} viewBox="0 0 800 450" className="w-full h-full" />
+      </div>
+    </div>
+  );
+};
+
+// --- Live Feed Component ---
+const LiveFeed = () => {
+  const [feeds, setFeeds] = useState([
+    { id: 1, source: 'AlienVault OTX', title: 'New Ransomware Variant: LockBit 4.0', time: '2 mins ago', emotion: 'Fear', intensity: 88, link: '#' },
+    { id: 2, source: 'Krebs on Security', title: 'Data Breach at Major Retailer', time: '15 mins ago', emotion: 'Anger', intensity: 72, link: '#' },
+    { id: 3, source: 'Threatpost', title: 'Zero-day in Chrome Patched', time: '1 hour ago', emotion: 'Surprise', intensity: 45, link: '#' },
+    { id: 4, source: 'DarkReading', title: 'Phishing Campaign Targeting HR', time: '3 hours ago', emotion: 'Disgust', intensity: 58, link: '#' },
+  ]);
+
+  const handleLoadMore = () => {
+    const newItems = [
+      { id: feeds.length + 1, source: 'BleepingComputer', title: 'New Botnet "Mirai-X" spreading via IoT', time: 'Just now', emotion: 'Surprise', intensity: 65, link: '#' },
+      { id: feeds.length + 2, source: 'SANS ISC', title: 'Anomalous traffic on port 445', time: 'Just now', emotion: 'Neutral', intensity: 30, link: '#' },
+    ];
+    setFeeds([...newItems, ...feeds]);
+  };
+
+  return (
+    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+      <SectionHeader title="Real-Time Intelligence Feed" subtitle="Live stream of cyber threats with emotional impact analysis." />
+      <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-800">
+        <AnimatePresence>
+          {feeds.map(feed => (
+            <motion.div 
+              key={feed.id}
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              className="bg-slate-950/50 border border-slate-800 p-4 rounded-xl flex items-center justify-between hover:border-indigo-500/50 transition-all cursor-pointer group mb-4"
+            >
+              <div className="flex items-center gap-4">
+                <div className={cn(
+                  "w-10 h-10 rounded-lg flex items-center justify-center",
+                  feed.emotion === 'Fear' ? "bg-orange-500/10 text-orange-500" : 
+                  feed.emotion === 'Anger' ? "bg-rose-500/10 text-rose-500" : "bg-indigo-500/10 text-indigo-500"
+                )}>
+                  <Radio size={20} className="animate-pulse" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{feed.source}</span>
+                    <span className="text-[10px] text-slate-600">•</span>
+                    <span className="text-[10px] text-slate-500">{feed.time}</span>
+                  </div>
+                  <h4 className="text-sm font-bold text-white group-hover:text-indigo-400 transition-colors">{feed.title}</h4>
+                </div>
+              </div>
+              <div className="flex items-center gap-6">
+                <div className="text-right">
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Emotion</div>
+                  <div className={cn(
+                    "text-xs font-bold",
+                    feed.emotion === 'Fear' ? "text-orange-500" : 
+                    feed.emotion === 'Anger' ? "text-rose-500" : "text-indigo-400"
+                  )}>{feed.emotion} ({feed.intensity}%)</div>
+                </div>
+                <ChevronRight size={18} className="text-slate-700 group-hover:text-indigo-500 transition-all" />
+              </div>
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </div>
+      <button 
+        onClick={handleLoadMore}
+        className="w-full mt-6 py-3 bg-slate-800/50 hover:bg-slate-800 text-slate-400 hover:text-white rounded-xl text-xs font-bold transition-all border border-slate-700 border-dashed"
+      >
+        Load More Intelligence
+      </button>
+    </div>
+  );
+};
+
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'datasets' | 'analysis' | 'comparison' | 'chatbot' | 'storage'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'datasets' | 'analysis' | 'comparison' | 'chatbot' | 'storage' | 'heatmap' | 'alerts' | 'collaboration' | 'darkweb'>('dashboard');
   const [analysisText, setAnalysisText] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState<any>(null);
@@ -472,107 +813,62 @@ export default function App() {
   const [compareDataset2, setCompareDataset2] = useState(DATASETS[1].id);
   const [isComparing, setIsComparing] = useState(false);
   const [comparisonReport, setComparisonReport] = useState<any>(null);
+  
+  // New Features State
+  const [alerts, setAlerts] = useState<any[]>([
+    { id: 1, name: 'Critical Aggression', type: 'intensity', category: 'Anger', threshold: 130, active: true, lastTriggered: '2026-04-16 14:22' },
+    { id: 2, name: 'Ransomware Keyword', type: 'keyword', value: 'ransomware', active: true, lastTriggered: 'Never' },
+    { id: 3, name: 'APT Threat Detection', type: 'threatType', value: 'APT Activity', active: true, lastTriggered: 'Never' },
+    { id: 4, name: 'High Panic State', type: 'emotion', category: 'Fear', threshold: 120, active: true, lastTriggered: 'Never' },
+  ]);
+  const [comments, setComments] = useState<any[]>([
+    { id: 1, author: 'Analyst_Alpha', avatar: 'A', content: 'The emotional subtext in the recent ShadowLock leak suggests a state-sponsored actor rather than a typical criminal group.', time: '2 hours ago', upvotes: 12, comments: 4 },
+    { id: 2, author: 'CTI_Expert', avatar: 'C', content: 'Agreed. The lack of "Joy" or "Excitement" in their manifestos points to a more professional, strategic intent.', time: '5 hours ago', upvotes: 8, comments: 2 },
+  ]);
+  const [newComment, setNewComment] = useState('');
+  const [targetLanguage, setTargetLanguage] = useState('en');
+  const [triggeredAlerts, setTriggeredAlerts] = useState<any[]>([
+    { id: 1, type: 'Aggression', value: 85, timestamp: '2026-04-14 10:30', source: 'Internal Analysis', info: 'Critical aggression threshold exceeded in ransom post segment.' },
+    { id: 2, type: 'Fear', value: 78, timestamp: '2026-04-14 09:15', source: 'ISIS-Twitter Monitor', info: 'Unusual spike in fear-based propaganda detected.' },
+  ]);
+  const [trendingTopics, setTrendingTopics] = useState<any[]>([
+    { id: 1, topic: '#LockBit4', volume: 'High', sentiment: 'Negative' },
+    { id: 2, topic: 'Zero-Day Chrome', volume: 'Medium', sentiment: 'Neutral' },
+    { id: 3, topic: 'Bank Logs Leak', volume: 'Critical', sentiment: 'Aggressive' },
+  ]);
+  const [forumContext, setForumContext] = useState('General Underground');
 
   // Firebase State
   const [user, setUser] = useState<any>(null);
+  const [userRole, setUserRole] = useState<'admin' | 'guest' | null>(null);
   const [uploads, setUploads] = useState<any[]>([]);
   const [isUploading, setIsUploading] = useState(false);
   
   // Auth UI State
   const [showLogin, setShowLogin] = useState(true);
-  const [phoneNumber, setPhoneNumber] = useState('');
-  const [otp, setOtp] = useState('');
-  const [verificationId, setVerificationId] = useState<string | null>(null);
-  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
   const [authError, setAuthError] = useState<string | null>(null);
-  const [isSendingOtp, setIsSendingOtp] = useState(false);
-  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
-  const recaptchaVerifierRef = React.useRef<RecaptchaVerifier | null>(null);
+  const [authMode, setAuthMode] = useState<'google' | 'email'>('google');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSignUp, setIsSignUp] = useState(false);
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (u) => {
-      setUser(u);
-      if (u) setShowLogin(false);
+      if (u) {
+        setUser(u);
+        // Simple Admin Check: If the email matches the developer's or specific pattern
+        const isAdmin = u.email === 'devanshmittal080@gmail.com' || u.email?.includes('admin');
+        setUserRole(isAdmin ? 'admin' : 'guest');
+        setShowLogin(false);
+      } else {
+        setUser(null);
+        if (!userRole) setUserRole(null);
+      }
     });
-    return () => {
-      unsubscribe();
-      if (recaptchaVerifierRef.current) {
-        recaptchaVerifierRef.current.clear();
-        recaptchaVerifierRef.current = null;
-      }
-    };
-  }, []);
-
-  const setupRecaptcha = () => {
-    if (recaptchaVerifierRef.current) return recaptchaVerifierRef.current;
-    
-    try {
-      const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-        size: 'invisible',
-        callback: () => {
-          // reCAPTCHA solved
-        }
-      });
-      recaptchaVerifierRef.current = verifier;
-      return verifier;
-    } catch (error) {
-      console.error("Recaptcha Init Error:", error);
-      return null;
-    }
-  };
-
-  const handlePhoneSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthError(null);
-    setIsSendingOtp(true);
-
-    try {
-      const verifier = setupRecaptcha();
-      if (!verifier) throw new Error("Failed to initialize reCAPTCHA. Please refresh the page.");
-      
-      const confirmation = await signInWithPhoneNumber(auth, phoneNumber, verifier);
-      setConfirmationResult(confirmation);
-      setVerificationId(confirmation.verificationId);
-    } catch (error: any) {
-      console.error("Phone Auth Error:", error);
-      
-      let message = "Failed to send OTP. Please check the phone number format (e.g., +1234567890).";
-      if (error.code === 'auth/operation-not-allowed') {
-        message = "Phone authentication is not enabled in the Firebase Console. Please enable it under Authentication > Sign-in method.";
-      } else if (error.code === 'auth/too-many-requests') {
-        message = "Too many requests. Please try again later.";
-      } else if (error.message?.includes('reCAPTCHA')) {
-        message = "reCAPTCHA verification failed. Please refresh the page and try again.";
-      }
-      
-      setAuthError(message);
-      
-      // Reset verifier on error
-      if (recaptchaVerifierRef.current) {
-        recaptchaVerifierRef.current.clear();
-        recaptchaVerifierRef.current = null;
-      }
-    } finally {
-      setIsSendingOtp(false);
-    }
-  };
-
-  const handleVerifyOtp = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!confirmationResult) return;
-    
-    setAuthError(null);
-    setIsVerifyingOtp(true);
-
-    try {
-      await confirmationResult.confirm(otp);
-    } catch (error: any) {
-      console.error("OTP Verification Error:", error);
-      setAuthError("Invalid OTP. Please try again.");
-    } finally {
-      setIsVerifyingOtp(false);
-    }
-  };
+    return () => unsubscribe();
+  }, [userRole]);
 
   const handleGoogleLogin = async () => {
     const provider = new GoogleAuthProvider();
@@ -585,7 +881,40 @@ export default function App() {
 
   const handleLogout = () => {
     signOut(auth);
+    setUserRole(null);
     setShowLogin(true);
+  };
+
+  const handleGuestLogin = () => {
+    setUser({
+      uid: 'guest-' + Math.random().toString(36).substr(2, 9),
+      displayName: 'Guest Analyst',
+      isAnonymous: true
+    });
+    setUserRole('guest');
+    setShowLogin(false);
+  };
+
+  const handleEmailAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!email || !password) return;
+    setIsAuthLoading(true);
+    setAuthError(null);
+    try {
+      if (isSignUp) {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        await updateProfile(userCredential.user, {
+          displayName: email.split('@')[0]
+        });
+      } else {
+        await signInWithEmailAndPassword(auth, email, password);
+      }
+    } catch (error: any) {
+      console.error("Auth Error:", error);
+      setAuthError(error.message);
+    } finally {
+      setIsAuthLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -715,7 +1044,21 @@ export default function App() {
     setIsAnalyzing(true);
     
     try {
-      const result = analyzeTweet(analysisText);
+      let textToAnalyze = analysisText;
+
+      // Multi-Language Support: Translate if not English
+      if (targetLanguage !== 'en' && process.env.GEMINI_API_KEY) {
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const translationResponse = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: `Translate the following text to English for CTI analysis. Maintain the original tone and emotional subtext: "${analysisText}"`,
+        });
+        if (translationResponse.text) {
+          textToAnalyze = translationResponse.text;
+        }
+      }
+
+      const result = analyzeTweet(textToAnalyze);
       
       // Determine insights based on paper's findings
       let insights = {
@@ -732,29 +1075,53 @@ export default function App() {
         return { ...e, A: Math.min(150, Math.floor(e.A * weight)) };
       });
 
-      // AI-Powered Intelligence Report
+      // AI-Powered Intelligence Report with Slang Recognition
       let aiReport = null;
       if (process.env.GEMINI_API_KEY) {
         const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
         const response = await ai.models.generateContent({
           model: "gemini-3-flash-preview",
-          contents: `Analyze this threat actor communication based on CTI principles: "${analysisText}". 
-          Provide a structured report with:
-          1. Threat Actor Profile (Potential)
-          2. Emotional Subtext Analysis
-          3. Strategic Intent
-          4. Recommended Countermeasures`,
+          contents: `Analyze this threat actor communication based on CTI principles and underground forum slang: "${textToAnalyze}". 
+          Provide a highly granular structured report in JSON format with exactly these fields:
+          1. threatActorProfile: (include sophistication, motivation, and potentialAffiliation as sub-fields)
+          2. emotionalSubtext: (string analysis of hidden aggression or fear)
+          3. strategicIntent: (include shortTermGoal and longTermObjective as sub-fields)
+          4. countermeasures: (include immediateAction and longTermPrevention as sub-fields)
+          5. slangDecoded: (decode any underground slang if present)`,
           config: {
             responseMimeType: "application/json",
             responseSchema: {
               type: Type.OBJECT,
               properties: {
-                profile: { type: Type.STRING },
-                emotions: { type: Type.STRING },
-                intent: { type: Type.STRING },
-                countermeasures: { type: Type.STRING }
+                threatActorProfile: {
+                  type: Type.OBJECT,
+                  properties: {
+                    sophistication: { type: Type.STRING },
+                    motivation: { type: Type.STRING },
+                    potentialAffiliation: { type: Type.STRING }
+                  },
+                  required: ["sophistication", "motivation"]
+                },
+                emotionalSubtext: { type: Type.STRING },
+                strategicIntent: {
+                  type: Type.OBJECT,
+                  properties: {
+                    shortTermGoal: { type: Type.STRING },
+                    longTermObjective: { type: Type.STRING }
+                  },
+                  required: ["shortTermGoal", "longTermObjective"]
+                },
+                countermeasures: {
+                  type: Type.OBJECT,
+                  properties: {
+                    immediateAction: { type: Type.STRING },
+                    longTermPrevention: { type: Type.STRING }
+                  },
+                  required: ["immediateAction", "longTermPrevention"]
+                },
+                slangDecoded: { type: Type.STRING }
               },
-              required: ["profile", "emotions", "intent", "countermeasures"]
+              required: ["threatActorProfile", "emotionalSubtext", "strategicIntent", "countermeasures"]
             }
           }
         });
@@ -764,11 +1131,77 @@ export default function App() {
         }
       }
 
-      setAnalysisResult({
+      // Calculate high-level metrics for alert evaluation
+      const dominantEmotion = [...dynamicEmotions].sort((a, b) => b.A - a.A)[0].subject;
+      const overallIntensity = Math.min(100, Math.max(0, Math.floor((result.polarity * -50) + (result.subjectivity * 50))));
+
+      // Update analysis result with derived metrics
+      const enrichedResult = {
         ...result,
+        dominantEmotion,
+        intensity: overallIntensity
+      };
+
+      setAnalysisResult({
+        ...enrichedResult,
         insights,
         emotions: dynamicEmotions,
-        aiReport
+        aiReport,
+        originalText: analysisText,
+        translatedText: textToAnalyze !== analysisText ? textToAnalyze : null
+      });
+
+      // Automated Alert System: Iterate through configured alert rules
+      alerts.forEach(rule => {
+        if (!rule.active) return;
+        
+        let triggered = false;
+        let triggerValue = 0;
+        let triggerInfo = '';
+
+        if (rule.type === 'intensity') {
+          const level = dynamicEmotions.find(e => e.subject === rule.category)?.A || 0;
+          if (level >= rule.threshold) {
+            triggered = true;
+            triggerValue = Math.floor((level / 150) * 100);
+            triggerInfo = `High ${rule.category} level (${level}) exceeded threshold of ${rule.threshold}.`;
+          }
+        } else if (rule.type === 'keyword') {
+          if (textToAnalyze.toLowerCase().includes(rule.value.toLowerCase())) {
+            triggered = true;
+            triggerValue = 100;
+            triggerInfo = `Keyword match detected: "${rule.value}" in communication pattern.`;
+          }
+        } else if (rule.type === 'emotion') {
+          if (dominantEmotion === rule.category) {
+            triggered = true;
+            triggerValue = overallIntensity;
+            triggerInfo = `Dominant emotion "${rule.category}" matches alert criteria.`;
+          }
+        } else if (rule.type === 'threatType') {
+          // Check if any threat category name matches the rule value
+          const matchingCategory = THREAT_CATEGORIES.find(c => c.name.toLowerCase().includes(rule.value.toLowerCase()));
+          if (matchingCategory && enrichedResult.isCyberRelevant) {
+            triggered = true;
+            triggerValue = matchingCategory.intensity;
+            triggerInfo = `Threat type alert: "${rule.value}" detected in relevant intelligence stream.`;
+          }
+        }
+
+        if (triggered) {
+          const newTriggeredAlert = {
+            id: Date.now() + Math.random(),
+            type: rule.name,
+            value: triggerValue,
+            timestamp: new Date().toLocaleString(),
+            source: 'Dynamic Logic Engine',
+            info: triggerInfo
+          };
+          setTriggeredAlerts(prev => [newTriggeredAlert, ...prev]);
+          
+          // Update lastTriggered in the main alerts list
+          setAlerts(prev => prev.map(a => a.id === rule.id ? { ...a, lastTriggered: new Date().toLocaleString() } : a));
+        }
       });
     } catch (error) {
       console.error("Analysis Error:", error);
@@ -788,146 +1221,320 @@ export default function App() {
     }
   };
 
+  const handleExportReport = () => {
+    if (!analysisResult) return;
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const fileName = `CyberSense_Analysis_Report_${timestamp}.txt`;
+
+    let reportContent = `CYBERSENSE INTELLIGENCE ANALYSIS REPORT
+==========================================
+Generated on: ${new Date().toLocaleString()}
+Source Text: "${analysisText}"
+
+1. SENTIMENT ANALYSIS
+---------------------
+Overall Sentiment: ${analysisResult.sentiment}
+Polarity Score: ${analysisResult.polarity}
+Subjectivity Score: ${analysisResult.subjectivity}
+Cyber Relevance: ${analysisResult.isCyberRelevant ? 'YES' : 'NO'}
+
+2. EMOTION DISTRIBUTION
+-----------------------
+${analysisResult.emotions.map((e: any) => `${e.subject}: ${e.A}`).join('\n')}
+
+3. INTELLIGENCE INSIGHTS
+------------------------
+Actor Motivation: ${analysisResult.insights.motivation}
+Public Reaction: ${analysisResult.insights.publicReaction}
+Psychological Impact: ${analysisResult.insights.psychologicalImpact}
+
+`;
+
+    if (analysisResult.aiReport) {
+      reportContent += `4. AI INTELLIGENCE REPORT
+-------------------------
+Threat Actor Profile:
+${analysisResult.aiReport.profile}
+
+Strategic Intent:
+${analysisResult.aiReport.intent}
+
+Emotional Subtext:
+${analysisResult.aiReport.emotions}
+
+Recommended Countermeasures:
+${analysisResult.aiReport.countermeasures}
+`;
+    }
+
+    const blob = new Blob([reportContent], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = fileName;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleAddAlert = () => {
+    const newAlert = {
+      id: Date.now(),
+      name: `New Rule ${alerts.length + 1}`,
+      type: 'intensity',
+      category: 'Anger',
+      threshold: 80,
+      active: true,
+      lastTriggered: 'Never'
+    };
+    setAlerts([...alerts, newAlert]);
+  };
+
+  const handleAddComment = () => {
+    if (!newComment.trim()) return;
+    const comment = {
+      id: comments.length + 1,
+      author: user?.displayName || 'Guest Analyst',
+      avatar: (user?.displayName || 'G')[0],
+      content: newComment,
+      time: 'Just now',
+      upvotes: 0,
+      comments: 0
+    };
+    setComments([comment, ...comments]);
+    setNewComment('');
+  };
+
+  const handleExportSTIX = () => {
+    if (!analysisResult) return;
+
+    const stixReport = {
+      type: "bundle",
+      id: `bundle--${crypto.randomUUID()}`,
+      objects: [
+        {
+          type: "indicator",
+          id: `indicator--${crypto.randomUUID()}`,
+          created: new Date().toISOString(),
+          modified: new Date().toISOString(),
+          name: "CyberSense Emotional Indicator",
+          description: `Analysis of: ${analysisText}`,
+          indicator_types: ["malicious-activity"],
+          pattern: "[file:name = 'CTI_Analysis']",
+          pattern_type: "stix",
+          valid_from: new Date().toISOString(),
+          external_references: [
+            {
+              source_name: "CyberSense",
+              description: "Emotion-aware CTI analysis",
+              url: "https://cybersense.ai"
+            }
+          ],
+          custom_properties: {
+            x_cybersense_sentiment: analysisResult.sentiment,
+            x_cybersense_polarity: analysisResult.polarity,
+            x_cybersense_emotions: analysisResult.emotions
+          }
+        }
+      ]
+    };
+
+    const blob = new Blob([JSON.stringify(stixReport, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `CyberSense_STIX_Report_${new Date().getTime()}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
   if (!user && showLogin) {
     return (
-      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
-        <div id="recaptcha-container"></div>
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 relative overflow-hidden">
+        {/* Atmospheric Background */}
+        <div className="absolute inset-0 z-0 h-full w-full">
+          <div className="absolute inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:40px_40px]" />
+          <div className="absolute inset-0 bg-indigo-500/5 [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]" />
+          <motion.div 
+            initial={{ top: '-10%' }}
+            animate={{ top: '110%' }}
+            transition={{ duration: 8, repeat: Infinity, ease: "linear" }}
+            className="absolute left-0 right-0 h-[2px] bg-indigo-500/20 shadow-[0_0_20px_rgba(99,102,241,0.5)] z-10"
+          />
+        </div>
+
         <motion.div 
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl"
+          initial={{ opacity: 0, scale: 0.95, y: 20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          className="w-full max-w-md relative z-20"
         >
-          <div className="text-center mb-8">
-            <div className="w-16 h-16 bg-indigo-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-indigo-600/20">
-              <Shield size={32} className="text-white" />
+          <div className="absolute -top-2 -left-2 w-8 h-8 border-t-2 border-l-2 border-indigo-500/40 rounded-tl-lg" />
+          <div className="absolute -top-2 -right-2 w-8 h-8 border-t-2 border-r-2 border-indigo-500/40 rounded-tr-lg" />
+          <div className="absolute -bottom-2 -left-2 w-8 h-8 border-b-2 border-l-2 border-indigo-500/40 rounded-bl-lg" />
+          <div className="absolute -bottom-2 -right-2 w-8 h-8 border-b-2 border-r-2 border-indigo-500/40 rounded-br-lg" />
+
+          <div className="bg-slate-900/80 backdrop-blur-xl border border-slate-800 rounded-3xl p-8 shadow-[0_0_50px_rgba(0,0,0,0.5)]">
+            <div className="text-center mb-8">
+              <motion.div 
+                animate={{ rotate: 360 }}
+                transition={{ duration: 20, repeat: Infinity, ease: "linear" }}
+                className="w-16 h-16 bg-indigo-600/10 border-2 border-indigo-500/30 rounded-full flex items-center justify-center mx-auto mb-4 relative"
+              >
+                <Shield size={28} className="text-indigo-400" />
+              </motion.div>
+              <h1 className="text-2xl font-black text-white tracking-tight italic font-serif">CyberSense</h1>
+              <p className="text-slate-500 text-[10px] uppercase tracking-widest mt-1">Intelligence Division</p>
             </div>
-            <h1 className="text-2xl font-bold text-white mb-2">CyberSense Access</h1>
-            <p className="text-slate-400 text-sm">Secure intelligence portal for CTI analysts</p>
-          </div>
 
-          <div className="space-y-6">
-            {!verificationId ? (
-              <form onSubmit={handlePhoneSignIn} className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Phone Number</label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-                    <input 
-                      type="tel" 
-                      placeholder="+1 234 567 8900"
-                      value={phoneNumber}
-                      onChange={(e) => setPhoneNumber(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 pl-10 pr-4 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all"
-                      required
-                    />
-                  </div>
-                  <p className="text-[10px] text-slate-500">Include country code (e.g., +1 for USA)</p>
-                </div>
-
-                {authError && (
-                  <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg flex items-center gap-2 text-rose-500 text-xs">
-                    <AlertTriangle size={14} />
-                    {authError}
-                  </div>
+            <div className="flex gap-2 p-1 bg-slate-950 rounded-xl mb-6 border border-slate-800">
+              <button 
+                onClick={() => setAuthMode('google')}
+                className={cn(
+                  "flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2",
+                  authMode === 'google' ? "bg-indigo-600 text-white" : "text-slate-500 hover:text-slate-300"
                 )}
-
-                <button 
-                  type="submit"
-                  disabled={isSendingOtp}
-                  className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                >
-                  {isSendingOtp ? <Loader2 size={18} className="animate-spin" /> : <Smartphone size={18} />}
-                  Send OTP Code
-                </button>
-
-                <div className="pt-4 border-t border-slate-800/50 mt-4">
-                  <button 
-                    type="button"
-                    onClick={() => setUser({ 
-                      uid: 'demo-analyst-123', 
-                      phoneNumber: '+1 000 000 0000', 
-                      displayName: 'Demo Analyst' 
-                    })}
-                    className="w-full py-2 bg-slate-800/30 hover:bg-slate-800/60 text-slate-500 hover:text-indigo-400 rounded-lg text-[10px] font-bold transition-all border border-dashed border-slate-700"
-                  >
-                    🚀 DEVELOPER BYPASS: Enter as Guest
-                  </button>
-                </div>
-              </form>
-            ) : (
-              <form onSubmit={handleVerifyOtp} className="space-y-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-widest">Verification Code</label>
-                  <div className="relative">
-                    <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
-                    <input 
-                      type="text" 
-                      placeholder="Enter 6-digit code"
-                      value={otp}
-                      onChange={(e) => setOtp(e.target.value)}
-                      className="w-full bg-slate-950 border border-slate-800 rounded-xl py-3 pl-10 pr-4 text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all tracking-[0.5em] text-center font-bold"
-                      maxLength={6}
-                      required
-                    />
-                  </div>
-                </div>
-
-                {authError && (
-                  <div className="p-3 bg-rose-500/10 border border-rose-500/20 rounded-lg flex items-center gap-2 text-rose-500 text-xs">
-                    <AlertTriangle size={14} />
-                    {authError}
-                  </div>
+              >
+                <Globe size={14} /> Google
+              </button>
+              <button 
+                onClick={() => setAuthMode('email')}
+                className={cn(
+                  "flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-2",
+                  authMode === 'email' ? "bg-indigo-600 text-white" : "text-slate-500 hover:text-slate-300"
                 )}
+              >
+                <Mail size={14} /> Email
+              </button>
+            </div>
 
-                <button 
-                  type="submit"
-                  disabled={isVerifyingOtp}
-                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            <AnimatePresence mode="wait">
+              {authMode === 'google' ? (
+                <motion.div
+                  key="google-mode"
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: 10 }}
+                  className="space-y-4"
                 >
-                  {isVerifyingOtp ? <Loader2 size={18} className="animate-spin" /> : <Shield size={18} />}
-                  Verify & Access
-                </button>
-
-                <button 
-                  type="button"
-                  onClick={() => {
-                    setVerificationId(null);
-                    setOtp('');
-                    setAuthError(null);
-                  }}
-                  className="w-full py-2 text-slate-500 hover:text-slate-300 text-xs font-medium transition-all"
-                >
-                  Change Phone Number
-                </button>
-
-                <div className="pt-4 border-t border-slate-800/50 mt-4">
                   <button 
-                    type="button"
-                    onClick={() => setUser({ 
-                      uid: 'demo-analyst-123', 
-                      phoneNumber: '+1 000 000 0000', 
-                      displayName: 'Demo Analyst' 
-                    })}
-                    className="w-full py-2 bg-slate-800/30 hover:bg-slate-800/60 text-slate-500 hover:text-indigo-400 rounded-lg text-[10px] font-bold transition-all border border-dashed border-slate-700"
+                    onClick={handleGoogleLogin}
+                    className="w-full py-4 bg-white hover:bg-slate-100 text-slate-950 rounded-2xl font-black transition-all flex items-center justify-center gap-3 shadow-xl group overflow-hidden relative"
                   >
-                    🚀 DEVELOPER BYPASS: Enter as Guest
+                    <img src="https://www.gstatic.com/firebase/anonymous-scan/google.svg" alt="Google" className="w-5 h-5 relative z-10" />
+                    <span className="relative z-10 text-xs uppercase">Unlock with Security Key</span>
                   </button>
-                </div>
-              </form>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="email-mode"
+                  initial={{ opacity: 0, x: 10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  exit={{ opacity: 0, x: -10 }}
+                  className="space-y-4"
+                >
+                  <form onSubmit={handleEmailAuth} className="space-y-3">
+                    <div className="relative">
+                      <Mail size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                      <input 
+                        type="email" 
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        placeholder="Analytical ID (Email)" 
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                        required
+                      />
+                    </div>
+                    <div className="relative">
+                      <Lock size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500" />
+                      <input 
+                        type={showPassword ? 'text' : 'password'} 
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        placeholder="Security Token (Password)" 
+                        className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-10 pr-12 py-3 text-xs text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 font-mono"
+                        required
+                      />
+                      <button 
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                      >
+                        {showPassword ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                    </div>
+                    <button 
+                      type="submit"
+                      disabled={isAuthLoading}
+                      className="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-2xl font-black transition-all flex items-center justify-center gap-2 shadow-xl disabled:opacity-50"
+                    >
+                      {isAuthLoading ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
+                      <span className="text-xs uppercase">{isSignUp ? 'Register Credential' : 'Verifying Session'}</span>
+                    </button>
+                  </form>
+                  <div className="text-center">
+                    <button 
+                      onClick={() => setIsSignUp(!isSignUp)}
+                      className="text-[10px] text-slate-500 hover:text-indigo-400 uppercase font-bold tracking-widest"
+                    >
+                      {isSignUp ? 'Already registered? Log in' : 'Request new analyst credential'}
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <div className="relative py-6">
+              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-800"></div></div>
+              <div className="relative flex justify-center text-[8px] uppercase font-bold tracking-widest">
+                <span className="bg-slate-900 px-4 text-slate-600">Quick Access Modes</span>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <button 
+                type="button"
+                onClick={() => {
+                  setUser({ uid: 'admin-demo', displayName: 'System Admin' });
+                  setUserRole('admin');
+                  setShowLogin(false);
+                }}
+                className="py-3 bg-indigo-600/10 border border-indigo-500/30 hover:bg-indigo-600 text-indigo-400 hover:text-white rounded-xl font-bold transition-all flex flex-col items-center justify-center gap-1 group"
+              >
+                <ShieldCheck size={20} className="group-hover:scale-110 transition-transform" />
+                <span className="text-[10px] uppercase tracking-tighter">Admin mode</span>
+              </button>
+              
+              <button 
+                type="button"
+                onClick={handleGuestLogin}
+                className="py-3 bg-slate-950 border border-slate-800 hover:border-slate-700 text-slate-500 hover:text-white rounded-xl font-bold transition-all flex flex-col items-center justify-center gap-1 group"
+              >
+                <UserCircle size={20} className="group-hover:scale-110 transition-transform text-slate-600 group-hover:text-indigo-400" />
+                <span className="text-[10px] uppercase tracking-tighter">Guest mode</span>
+              </button>
+            </div>
+
+            {authError && (
+              <div className="mt-4 p-3 bg-rose-500/10 border border-rose-500/20 rounded-xl text-rose-500 text-[10px] font-mono text-center">
+                SECURITY_ERROR: {authError}
+              </div>
             )}
 
-            <div className="relative py-4">
-              <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-800"></div></div>
-              <div className="relative flex justify-center text-xs uppercase"><span className="bg-slate-900 px-2 text-slate-500 font-bold">Or continue with</span></div>
+            <div className="mt-8 flex justify-center gap-4 border-t border-slate-800 pt-6">
+              <div className="flex flex-col items-center">
+                <span className="text-[8px] text-slate-600 uppercase font-bold">API</span>
+                <span className="text-[10px] text-emerald-500 font-mono">200 OK</span>
+              </div>
+              <div className="w-[1px] h-6 bg-slate-800" />
+              <div className="flex flex-col items-center">
+                <span className="text-[8px] text-slate-600 uppercase font-bold">SSL</span>
+                <span className="text-[10px] text-indigo-400 font-mono">TLS 1.3</span>
+              </div>
             </div>
-
-            <button 
-              onClick={handleGoogleLogin}
-              className="w-full py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-bold transition-all flex items-center justify-center gap-3 border border-slate-700"
-            >
-              <img src="https://www.gstatic.com/firebase/anonymous-scan/google.svg" alt="Google" className="w-5 h-5" />
-              Google Account
-            </button>
           </div>
         </motion.div>
       </div>
@@ -986,6 +1593,52 @@ export default function App() {
             <Zap size={20} />
             <span className="font-medium">Threat Comparison</span>
           </button>
+
+          <div className="pt-4 pb-2 px-4">
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Advanced Intelligence</p>
+          </div>
+
+          <button 
+            onClick={() => setActiveTab('heatmap')}
+            className={cn(
+              "w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all",
+              activeTab === 'heatmap' ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/20" : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            )}
+          >
+            <Map size={20} />
+            <span className="font-medium">Global Heatmap</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('alerts')}
+            className={cn(
+              "w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all",
+              activeTab === 'alerts' ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/20" : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            )}
+          >
+            <Bell size={20} />
+            <span className="font-medium">Alert System</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('collaboration')}
+            className={cn(
+              "w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all",
+              activeTab === 'collaboration' ? "bg-indigo-600 text-white shadow-lg shadow-indigo-600/20" : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            )}
+          >
+            <Users size={20} />
+            <span className="font-medium">Collaboration</span>
+          </button>
+          <button 
+            onClick={() => setActiveTab('darkweb')}
+            className={cn(
+              "w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-all",
+              activeTab === 'darkweb' ? "bg-rose-600 text-white shadow-lg shadow-rose-600/20" : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+            )}
+          >
+            <Terminal size={20} />
+            <span className="font-medium">Dark Web Simulator</span>
+          </button>
+
           <button 
             onClick={() => setActiveTab('chatbot')}
             className={cn(
@@ -1010,20 +1663,34 @@ export default function App() {
 
         <div className="p-4 border-t border-slate-800">
           {user ? (
-            <div className="flex items-center gap-3 p-2 bg-slate-800/50 rounded-xl mb-4">
-              {user.photoURL ? (
-                <img src={user.photoURL} alt={user.displayName} className="w-8 h-8 rounded-full" />
-              ) : (
-                <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-[10px] font-bold">
-                  {user.phoneNumber?.slice(-2) || '??'}
+            <div className="p-3 bg-slate-800/50 rounded-xl mb-4 border border-slate-700/50">
+              <div className="flex items-center gap-3 mb-2">
+                {user.photoURL ? (
+                  <img src={user.photoURL} alt={user.displayName} className="w-8 h-8 rounded-full border border-indigo-500/50" />
+                ) : (
+                  <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white text-[10px] font-bold shadow-lg shadow-indigo-600/20">
+                    {user.displayName?.charAt(0) || 'A'}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-white truncate">{user.displayName || 'Analyst'}</p>
+                  <div className="flex items-center gap-1.5">
+                    <span className={cn(
+                      "text-[8px] font-bold px-1.5 py-0.5 rounded-full uppercase tracking-widest leading-none",
+                      userRole === 'admin' ? "bg-rose-500/10 text-rose-500 border border-rose-500/30" : "bg-emerald-500/10 text-emerald-500 border border-emerald-500/30"
+                    )}>
+                      {userRole || 'Analyst'}
+                    </span>
+                    {userRole === 'admin' && <Shield size={8} className="text-rose-500" />}
+                  </div>
                 </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-bold text-white truncate">{user.displayName || user.phoneNumber}</p>
-                <button onClick={handleLogout} className="text-[10px] text-indigo-400 hover:underline flex items-center gap-1">
-                  <LogOut size={10} /> Sign Out
-                </button>
               </div>
+              <button 
+                onClick={handleLogout} 
+                className="w-full py-2 bg-slate-900/50 hover:bg-rose-500/10 text-slate-500 hover:text-rose-500 rounded-lg text-[10px] font-bold transition-all flex items-center justify-center gap-2 border border-slate-800 border-dashed"
+              >
+                <LogOut size={12} /> Sign Out Session
+              </button>
             </div>
           ) : (
             <button 
@@ -1082,158 +1749,270 @@ export default function App() {
               exit={{ opacity: 0, y: -10 }}
               className="space-y-8"
             >
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                <StatCard title="Corpus C Size" value={stats.corpusSize.toString()} icon={Activity} color="bg-indigo-500" />
-                <StatCard title="H-Set (Cyber)" value={stats.hSetSize.toString()} icon={Shield} color="bg-rose-500" />
-                <StatCard title="B-Set (Other)" value={stats.bSetSize.toString()} icon={Globe} color="bg-slate-700" />
-                <StatCard title="Outliers Detected" value={stats.outliersCount.toString()} icon={AlertTriangle} color="bg-amber-500" />
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                <div className="md:col-span-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <StatCard title="Corpus C Size" value={stats.corpusSize.toString()} icon={Activity} color="bg-indigo-500/10 text-indigo-400" trend="+12.4%" sparkData={[30, 45, 38, 65, 48, 72, 55]} />
+                  <StatCard title="H-Set (Cyber)" value={stats.hSetSize.toString()} icon={Shield} color="bg-rose-500/10 text-rose-400" trend="+8.1%" sparkData={[20, 32, 45, 38, 52, 60, 68]} />
+                  <StatCard title="B-Set (Other)" value={stats.bSetSize.toString()} icon={Globe} color="bg-slate-800 text-slate-400" trend="-2.4%" sparkData={[80, 75, 82, 70, 65, 62, 58]} />
+                  <StatCard title="Outliers Detected" value={stats.outliersCount.toString()} icon={AlertTriangle} color="bg-amber-500/10 text-amber-500" trend="+4" sparkData={[5, 8, 12, 7, 15, 10, 18]} />
+                </div>
+                <div className="bg-slate-900 border border-slate-800 rounded-3xl p-6 flex flex-col items-center justify-center relative overflow-hidden group">
+                  <div className="absolute inset-0 bg-indigo-500/5 opacity-0 group-hover:opacity-10 transition-opacity" />
+                  <SectionHeader title="Global Risk" subtitle="System-wide threat index" />
+                  <RiskGauge value={68} />
+                </div>
               </div>
 
-              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
-                {/* Research Context */}
-                <div className="xl:col-span-1 bg-indigo-600/10 border border-indigo-500/20 rounded-2xl p-6">
-                  <SectionHeader title="Research Context" subtitle="Methodology from Arora et al. (2023)" />
-                  <div className="space-y-4">
-                    <div className="flex items-start gap-3">
-                      <div className="mt-1 bg-indigo-500 p-1.5 rounded text-white">
-                        <Shield size={14} />
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-bold text-white">Bot Libre Integration</h4>
-                        <p className="text-xs text-slate-400 mt-1">Chatbot deployed on Twitter to initiate conversations and collect real-time intelligence (Section 3.1).</p>
-                      </div>
+              <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
+                {/* Advanced Intelligence Feed */}
+                <div className="xl:col-span-1 bg-slate-900/50 border border-slate-800 rounded-2xl p-6 flex flex-col h-full hover:border-slate-700 transition-colors relative overflow-hidden group">
+                  <div className="absolute -right-12 -bottom-12 w-24 h-24 bg-indigo-500/5 rounded-full blur-3xl group-hover:bg-indigo-500/10 transition-colors pointer-events-none" />
+                  <div className="flex items-center justify-between mb-6">
+                    <SectionHeader title="Cyber Pulse" subtitle="Real-time telemetry" />
+                    <div className="flex items-center gap-2 px-2 py-0.5 bg-emerald-500/5 border border-emerald-500/20 rounded-full">
+                       <span className="text-[10px] text-emerald-500 font-black uppercase tracking-widest">Live</span>
+                       <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" />
                     </div>
-                    <div className="flex items-start gap-3">
-                      <div className="mt-1 bg-indigo-500 p-1.5 rounded text-white">
-                        <Database size={14} />
+                  </div>
+                  <div className="flex-1 overflow-hidden">
+                    <LiveActivityFeed />
+                  </div>
+                  <button className="w-full mt-4 py-2 border border-slate-800 rounded-xl text-[10px] text-slate-500 uppercase tracking-widest font-bold hover:bg-slate-800 hover:text-slate-300 transition-all">
+                    System Logs
+                  </button>
+                </div>
+
+                {/* Threat Intensity Profile */}
+                <div className="xl:col-span-1 bg-slate-900/50 border border-slate-800 rounded-2xl p-6 relative overflow-hidden group h-full hover:border-slate-700 transition-colors">
+                  <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity pointer-events-none">
+                    <Activity size={120} className="text-indigo-400" />
+                  </div>
+                  <div className="absolute -left-16 -top-16 w-32 h-32 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+                  <SectionHeader title="Threat Intensity Matrix" subtitle="Global impact levels by category" />
+                  <div className="h-64 mt-6">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <RadarChart cx="50%" cy="50%" outerRadius="80%" data={THREAT_CATEGORIES}>
+                        <PolarGrid stroke="#1e293b" />
+                        <PolarAngleAxis dataKey="name" tick={{ fill: '#94a3b8', fontSize: 9, fontWeight: 600 }} />
+                        <PolarRadiusAxis angle={30} domain={[0, 100]} tick={{ fill: '#475569', fontSize: 8 }} axisLine={false} />
+                        <Radar
+                          name="Intensity"
+                          dataKey="intensity"
+                          stroke="#6366f1"
+                          fill="#6366f1"
+                          fillOpacity={0.4}
+                        />
+                        <Tooltip 
+                          contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b', borderRadius: '8px' }}
+                          itemStyle={{ color: '#f8fafc', fontSize: '10px' }}
+                        />
+                      </RadarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 mt-6">
+                    {Object.entries(THREAT_LEVEL_COLORS).map(([level, color]) => (
+                      <div key={level} className="flex items-center gap-2 p-1.5 rounded-lg bg-slate-950 border border-slate-800/50 hover:border-slate-700 transition-colors">
+                        <div className="w-2 h-2 rounded-full shadow-[0_0_8px_rgba(0,0,0,0.5)]" style={{ backgroundColor: color }} />
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">{level}</span>
                       </div>
-                      <div>
-                        <h4 className="text-sm font-bold text-white">NICCS Lexicon (δ)</h4>
-                        <p className="text-xs text-slate-400 mt-1">Used as a reference to identify cyber-relevant tweets (H-set) vs. general tweets (B-set).</p>
-                      </div>
-                    </div>
-                    <div className="flex items-start gap-3">
-                      <div className="mt-1 bg-indigo-500 p-1.5 rounded text-white">
-                        <TrendingUp size={14} />
-                      </div>
-                      <div>
-                        <h4 className="text-sm font-bold text-white">Sentiment Orientation</h4>
-                        <p className="text-xs text-slate-400 mt-1">Utilizing TextBlob and SentiWordnet for complex polarity and subjectivity analysis.</p>
-                      </div>
-                    </div>
+                    ))}
                   </div>
                 </div>
 
                 {/* Subjectivity vs Polarity Scatter Plot (Figure 4) */}
-                <div className="xl:col-span-2 bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-                  <SectionHeader title="Subjectivity vs. Polarity (Figure 4)" subtitle="Mapping the emotional landscape of the corpus" />
-                  <div className="h-80">
+                <div className="xl:col-span-2 bg-slate-900/50 border border-slate-800 rounded-2xl p-6 h-full hover:border-slate-700 transition-colors">
+                  <SectionHeader title="Emotional Clustering (Figure 4)" subtitle="Mapping dataset sentiment density" />
+                  <div className="h-80 mt-4 relative">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={processedTweets}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" />
-                        <XAxis dataKey="polarity" type="number" domain={[-1, 1]} tick={{ fill: '#94a3b8' }} label={{ value: 'Polarity', position: 'bottom', fill: '#94a3b8' }} />
-                        <YAxis dataKey="subjectivity" type="number" domain={[0, 1]} tick={{ fill: '#94a3b8' }} label={{ value: 'Subjectivity', angle: -90, position: 'left', fill: '#94a3b8' }} />
-                        <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b' }} />
+                        <XAxis dataKey="polarity" type="number" domain={[-1, 1]} hide />
+                        <YAxis dataKey="subjectivity" type="number" domain={[0, 1]} hide />
+                        <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b' }} cursor={{ strokeDasharray: '3 3' }} />
                         <Line type="monotone" dataKey="subjectivity" stroke="transparent" dot={(props: any) => {
                           const { cx, cy, payload } = props;
                           const isOutlier = payload.subjectivity > 0.6 && payload.polarity < -0.4;
                           return (
-                            <circle 
+                            <motion.circle 
+                              initial={{ r: 0 }}
+                              animate={{ r: isOutlier ? 6 : 4 }}
                               cx={cx} 
                               cy={cy} 
-                              r={isOutlier ? 6 : 4} 
                               fill={isOutlier ? '#ef4444' : '#6366f1'} 
                               stroke={isOutlier ? '#fff' : 'none'}
+                              className="cursor-pointer"
+                              whileHover={{ r: 8 }}
                             />
                           );
                         }} />
                       </LineChart>
                     </ResponsiveContainer>
+                    <div className="absolute top-0 right-0 p-4 flex flex-col text-[8px] font-black text-slate-600 gap-1 pointer-events-none uppercase tracking-widest">
+                       <span>Polarity Axis (X)</span>
+                       <span>Subjectivity Axis (Y)</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4 mt-6">
+                    <div className="p-3 bg-rose-500/5 border border-rose-500/20 rounded-xl">
+                       <span className="text-[9px] text-rose-500 font-bold uppercase block mb-1">Outliers identified</span>
+                       <span className="text-lg font-black text-white">{stats.outliersCount}</span>
+                    </div>
+                    <div className="p-3 bg-indigo-500/5 border border-indigo-500/20 rounded-xl">
+                       <span className="text-[9px] text-indigo-400 font-bold uppercase block mb-1">Mean Polarity</span>
+                       <span className="text-lg font-black text-white">-0.12</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+                {/* Sentiment Distribution (Table 1) */}
+                <div className="xl:col-span-2 bg-slate-900 border border-slate-800 rounded-3xl p-8 relative overflow-hidden group">
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(99,102,241,0.05),transparent)] pointer-events-none" />
+                  <SectionHeader title="Sentiment Distribution (Table 1)" subtitle="Sentiment classification breakdown" />
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mt-6">
+                    <div className="md:col-span-2 h-72">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={sentimentDist} layout="vertical" margin={{ left: 20 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" horizontal={false} />
+                          <XAxis type="number" hide />
+                          <YAxis dataKey="name" type="category" tick={{ fill: '#94a3b8', fontSize: 10, fontWeight: 'bold' }} stroke="none" />
+                          <Tooltip cursor={{ fill: '#1e293b', opacity: 0.4 }} contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b' }} />
+                          <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={32}>
+                            {sentimentDist.map((entry, index) => (
+                              <Cell key={`cell-${index}`} fill={entry.color} fillOpacity={0.8} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                    <div className="space-y-4">
+                      {sentimentDist.map(item => (
+                        <div key={item.name} className="p-4 bg-slate-950 rounded-2xl border border-slate-800 flex justify-between items-center group/item hover:border-slate-600 transition-all hover:scale-[1.02]">
+                          <div>
+                            <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{item.name}</span>
+                            <div className="flex items-center gap-2">
+                               <p className="text-2xl font-black text-white">{item.value}</p>
+                               <span className="text-[10px] text-slate-600 font-mono">({((item.value / stats.corpusSize) * 100).toFixed(1)}%)</span>
+                            </div>
+                          </div>
+                          <div className={cn("w-1.5 h-12 rounded-full shadow-[0_0_15px]", item.name === 'Negative' ? "bg-rose-500 shadow-rose-500/30" : item.name === 'Positive' ? "bg-emerald-500 shadow-emerald-500/30" : "bg-slate-500 shadow-slate-500/30")} />
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
-                {/* Frequent Markers (Ψf) */}
-                <div className="xl:col-span-1 bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-                  <SectionHeader title="Frequent Markers (Ψf)" subtitle="Top latent words mined via Apriori" />
-                  <div className="space-y-4">
-                    {frequentMarkers.map((marker, idx) => (
-                      <div key={marker.word} className="flex items-center justify-between p-3 bg-slate-950 rounded-lg border border-slate-800">
-                        <div className="flex items-center gap-3">
-                          <span className="text-indigo-500 font-mono text-xs">#{idx + 1}</span>
-                          <span className="text-sm font-medium text-white">{marker.word}</span>
+                {/* Frequent Markers Optimized */}
+                <div className="xl:col-span-1 bg-slate-900/50 border border-slate-800 rounded-3xl p-8 hover:border-slate-700 transition-all">
+                  <SectionHeader title="Intelligence Markers (Ψf)" subtitle="Latent word associations from dataset" />
+                  <div className="grid grid-cols-2 gap-4 mt-6">
+                    {frequentMarkers.slice(0, 6).map((marker, idx) => (
+                      <div key={marker.word} className="p-4 bg-slate-950 rounded-2xl border border-slate-800 relative group overflow-hidden transition-all hover:border-indigo-500/50">
+                        <div className="absolute inset-0 bg-indigo-500/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <div className="flex justify-between items-start mb-3">
+                          <span className="px-2 py-0.5 bg-slate-900 rounded-full text-[9px] text-indigo-400 font-black border border-slate-800">#{idx + 1}</span>
+                          <span className="text-[10px] text-slate-600 font-mono font-bold tracking-tighter">{(marker.support * 100).toFixed(1)}%</span>
                         </div>
-                        <span className="text-xs text-slate-500">{(marker.support * 100).toFixed(1)}% support</span>
+                        <h4 className="text-sm font-bold text-white tracking-tight truncate">{marker.word}</h4>
+                        <div className="mt-3 w-full h-1 bg-slate-900 rounded-full overflow-hidden">
+                          <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${marker.support * 250}%` }}
+                            className="h-full bg-indigo-500 shadow-[0_0_10px_#6366f1]" 
+                          />
+                        </div>
                       </div>
                     ))}
                   </div>
-                  <div className="mt-6 p-4 bg-indigo-500/10 rounded-xl border border-indigo-500/20">
-                    <p className="text-xs text-indigo-300 leading-relaxed">
-                      <Info size={12} className="inline mr-1 mb-0.5" />
-                      Markers with support ≥ 1% are classified as frequent markers (Section 3.2.3).
+                  <div className="mt-8 p-4 bg-indigo-600/5 rounded-2xl border border-indigo-500/10">
+                    <p className="text-[10px] text-slate-500 leading-relaxed italic">
+                      <Info size={12} className="inline mr-1 mb-0.5 text-indigo-400" />
+                      Visualizing latent variables discovered via Apriori associating cyber-relevant terms.
                     </p>
                   </div>
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                {/* Sentiment Distribution (Table 1) */}
-                <div className="bg-slate-900/50 border border-slate-800 rounded-2xl p-6">
-                  <SectionHeader title="Sentiment Classification (Table 1)" subtitle="Distribution of Positive, Neutral, and Negative tweets" />
-                  <div className="h-64">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={sentimentDist}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#1e293b" vertical={false} />
-                        <XAxis dataKey="name" tick={{ fill: '#94a3b8' }} />
-                        <YAxis tick={{ fill: '#94a3b8' }} />
-                        <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1e293b' }} />
-                        <Bar dataKey="value">
-                          {sentimentDist.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
+              {/* Research Insights Summary */}
+              <div className="bg-gradient-to-r from-indigo-600 to-violet-700 rounded-3xl p-10 flex flex-col md:flex-row items-center justify-between gap-8 shadow-2xl shadow-indigo-500/20">
+                 <div className="max-w-2xl text-center md:text-left">
+                    <h2 className="text-3xl font-black text-white mb-4 italic tracking-tight underline decoration-indigo-300 underline-offset-8">Intelligence Synthesis</h2>
+                    <p className="text-indigo-100 text-sm leading-relaxed mb-6 opacity-90">
+                      Our current dataset reveals a <span className="font-black text-white">0.84 correlation</span> between technical markers and negative emotional intensity. This synthesis suggests that highly sophisticated threat actors utilize more aggressive sentiment patterns compared to general-purpose accounts.
+                    </p>
+                    <div className="flex flex-wrap gap-4 justify-center md:justify-start">
+                       <div className="px-4 py-2 bg-white/10 backdrop-blur-md rounded-xl border border-white/10 flex items-center gap-2">
+                          <TrendingUp size={16} className="text-emerald-300" />
+                          <span className="text-[10px] font-black text-white uppercase tracking-widest">Growth in H-Set (+12%)</span>
+                       </div>
+                       <div className="px-4 py-2 bg-white/10 backdrop-blur-md rounded-xl border border-white/10 flex items-center gap-2">
+                          <BrainCircuit size={16} className="text-indigo-300" />
+                          <span className="text-[10px] font-black text-white uppercase tracking-widest">Sentiment Precision 92%</span>
+                       </div>
+                    </div>
+                 </div>
+                 <div className="shrink-0">
+                    <div className="bg-white p-6 rounded-3xl shadow-2xl rotate-3 hover:rotate-0 transition-transform cursor-crosshair">
+                       <Zap size={48} className="text-indigo-600" />
+                    </div>
+                 </div>
+              </div>
 
-              {/* Recent Alerts */}
-              <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden">
-                <div className="p-6 border-b border-slate-800 flex items-center justify-between">
-                  <SectionHeader title="Recent Intelligence Alerts" />
-                  <button className="text-indigo-400 text-sm font-medium hover:underline">View all</button>
+              <div className="bg-slate-900/50 border border-slate-800 rounded-2xl overflow-hidden shadow-xl">
+                <div className="p-6 border-b border-slate-800 flex items-center justify-between bg-slate-900/80 backdrop-blur-md sticky top-0 z-10">
+                  <SectionHeader title="Critical Intelligence Alerts" subtitle="Recent anomalies requiring immediate review" />
+                  <button onClick={() => setActiveTab('alerts')} className="px-4 py-2 bg-slate-800 border border-slate-700 text-slate-300 text-[10px] font-bold uppercase tracking-widest rounded-xl hover:bg-slate-700 hover:text-white transition-all">
+                    System Alert Hub
+                  </button>
                 </div>
-                <div className="divide-y divide-slate-800">
-                  {[
-                    { id: 1, title: 'New Ransomware Variant "ShadowLock"', time: '12 mins ago', emotion: 'Fear', level: 'Critical' },
-                    { id: 2, title: 'Radicalization spike in ISIS Twitter Dataset', time: '45 mins ago', emotion: 'Anger', level: 'High' },
-                    { id: 3, title: 'Anomalous Botnet traffic in CTU-13 node', time: '2 hours ago', emotion: 'Neutral', level: 'Medium' },
-                  ].map((alert) => (
-                    <div key={alert.id} className="p-4 flex items-center justify-between hover:bg-slate-800/30 transition-colors">
-                      <div className="flex items-center gap-4">
+                <div className="divide-y divide-slate-800/50">
+                  {triggeredAlerts.length > 0 ? triggeredAlerts.slice(0, 5).map((alert) => (
+                    <div key={alert.id} className="p-5 flex items-center justify-between hover:bg-slate-800/20 transition-all group">
+                      <div className="flex items-center gap-5">
                         <div className={cn(
-                          "p-2 rounded-lg",
-                          alert.level === 'Critical' ? "bg-rose-500/10 text-rose-500" : "bg-indigo-500/10 text-indigo-500"
+                          "w-12 h-12 rounded-2xl flex items-center justify-center transition-all group-hover:scale-110",
+                          alert.value > 100 ? "bg-rose-500/10 text-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.1)]" : "bg-indigo-500/10 text-indigo-500"
                         )}>
-                          {alert.level === 'Critical' ? <AlertTriangle size={20} /> : <Info size={20} />}
+                          <AlertTriangle size={24} />
                         </div>
                         <div>
-                          <h4 className="text-sm font-semibold text-white">{alert.title}</h4>
-                          <p className="text-xs text-slate-400">{alert.time} • Dominant Emotion: <span className="text-slate-200">{alert.emotion}</span></p>
+                          <div className="flex items-center gap-3 mb-1">
+                             <h4 className="text-sm font-black text-white tracking-tight">{alert.type}</h4>
+                             <span className="text-[9px] text-slate-600 font-mono font-bold tracking-widest uppercase">{alert.timestamp}</span>
+                          </div>
+                          <p className="text-xs text-slate-500 font-medium italic mb-2">"{alert.info}"</p>
+                          <div className="flex items-center gap-3">
+                             <span className="text-[9px] px-1.5 py-0.5 bg-slate-950 border border-slate-800 rounded text-slate-500 font-black uppercase tracking-widest">Source: {alert.source}</span>
+                             <div className="flex items-center gap-1">
+                                <Activity size={10} className="text-slate-700" />
+                                <span className="text-[9px] text-slate-600 font-black uppercase">Intensity {alert.value}%</span>
+                             </div>
+                          </div>
                         </div>
                       </div>
-                      <div className={cn(
-                        "px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider",
-                        alert.level === 'Critical' ? "bg-rose-500/20 text-rose-500 border border-rose-500/30" : "bg-indigo-500/20 text-indigo-500 border border-indigo-500/30"
-                      )}>
-                        {alert.level}
+                      <div className="flex flex-col items-end gap-2">
+                        <div className={cn(
+                          "px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest border",
+                          alert.value > 100 ? "bg-rose-500/20 text-rose-500 border-rose-500/30" : "bg-indigo-500/20 text-indigo-500 border-indigo-500/30"
+                        )}>
+                          {alert.value > 100 ? 'Critical' : 'Priority'}
+                        </div>
+                        <button className="text-[9px] text-indigo-400 font-black uppercase tracking-widest hover:underline opacity-0 group-hover:opacity-100 transition-opacity">
+                           Analysis Report
+                        </button>
                       </div>
                     </div>
-                  ))}
+                  )) : (
+                    <div className="p-12 text-center">
+                       <ShieldCheck className="mx-auto text-slate-800 mb-4" size={48} />
+                       <p className="text-slate-500 text-sm font-medium">System reports no critical anomalies in the current cycle.</p>
+                    </div>
+                  )}
                 </div>
               </div>
-            </div>
-          </motion.div>
-        )}
+            </motion.div>
+          )}
 
           {/* Datasets Tab */}
           {activeTab === 'datasets' && (
@@ -1416,6 +2195,23 @@ export default function App() {
                 <SectionHeader title="Simulate Emotion-Aware Analysis" subtitle="Input CTI text or social media posts to analyze sentiment and underlying emotions." />
                 
                 <div className="space-y-4">
+                  <div className="flex items-center gap-4 mb-2">
+                    <div className="flex items-center gap-2 bg-slate-950 border border-slate-800 rounded-lg px-3 py-1.5">
+                      <Languages size={14} className="text-indigo-400" />
+                      <select 
+                        value={targetLanguage}
+                        onChange={(e) => setTargetLanguage(e.target.value)}
+                        className="bg-transparent text-xs text-white focus:outline-none"
+                      >
+                        <option value="en">English (Default)</option>
+                        <option value="ru">Russian</option>
+                        <option value="zh">Chinese</option>
+                        <option value="es">Spanish</option>
+                        <option value="ar">Arabic</option>
+                      </select>
+                    </div>
+                    <span className="text-[10px] text-slate-500 font-medium uppercase tracking-widest">AI Translation Enabled</span>
+                  </div>
                   <textarea 
                     value={analysisText}
                     onChange={(e) => setAnalysisText(e.target.value)}
@@ -1463,6 +2259,22 @@ export default function App() {
 
               {analysisResult && !isAnalyzing && (
                 <>
+                  <div className="flex justify-end gap-3">
+                    <button
+                      onClick={handleExportSTIX}
+                      className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-sm font-bold transition-all border border-slate-700 shadow-lg"
+                    >
+                      <Share2 size={18} className="text-emerald-400" />
+                      Export STIX 2.1
+                    </button>
+                    <button
+                      onClick={handleExportReport}
+                      className="flex items-center gap-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-sm font-bold transition-all border border-slate-700 shadow-lg"
+                    >
+                      <FileText size={18} className="text-indigo-400" />
+                      Export Report (.txt)
+                    </button>
+                  </div>
                   <motion.div 
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -1599,24 +2411,73 @@ export default function App() {
                         </h3>
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                           <div className="space-y-4">
-                            <div>
-                              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Threat Actor Profile</h4>
-                              <p className="text-sm text-slate-300 bg-slate-950/30 p-4 rounded-xl border border-slate-800/50">{analysisResult.aiReport.profile}</p>
+                            <div className="bg-slate-950/30 p-5 rounded-xl border border-slate-800/50">
+                              <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em] mb-3">Threat Actor Profile</h4>
+                              <div className="space-y-3">
+                                <div>
+                                  <span className="text-[10px] text-slate-500 uppercase font-bold">Sophistication</span>
+                                  <p className="text-sm text-slate-300">{analysisResult.aiReport.threatActorProfile.sophistication}</p>
+                                </div>
+                                <div>
+                                  <span className="text-[10px] text-slate-500 uppercase font-bold">Motivation</span>
+                                  <p className="text-sm text-slate-300">{analysisResult.aiReport.threatActorProfile.motivation}</p>
+                                </div>
+                                {analysisResult.aiReport.threatActorProfile.potentialAffiliation && (
+                                  <div>
+                                    <span className="text-[10px] text-slate-500 uppercase font-bold">Potential Affiliation</span>
+                                    <p className="text-sm text-slate-300">{analysisResult.aiReport.threatActorProfile.potentialAffiliation}</p>
+                                  </div>
+                                )}
+                              </div>
                             </div>
-                            <div>
-                              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Strategic Intent</h4>
-                              <p className="text-sm text-slate-300 bg-slate-950/30 p-4 rounded-xl border border-slate-800/50">{analysisResult.aiReport.intent}</p>
+                            
+                            <div className="bg-slate-950/30 p-5 rounded-xl border border-slate-800/50">
+                              <h4 className="text-[10px] font-black text-amber-400 uppercase tracking-[0.2em] mb-3">Strategic Intent</h4>
+                              <div className="space-y-3">
+                                <div>
+                                  <span className="text-[10px] text-slate-500 uppercase font-bold">Short-Term Goal</span>
+                                  <p className="text-sm text-slate-300">{analysisResult.aiReport.strategicIntent.shortTermGoal}</p>
+                                </div>
+                                <div>
+                                  <span className="text-[10px] text-slate-500 uppercase font-bold">Long-Term Objective</span>
+                                  <p className="text-sm text-slate-300">{analysisResult.aiReport.strategicIntent.longTermObjective}</p>
+                                </div>
+                              </div>
                             </div>
                           </div>
+
                           <div className="space-y-4">
-                            <div>
-                              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Emotional Subtext</h4>
-                              <p className="text-sm text-slate-300 bg-slate-950/30 p-4 rounded-xl border border-slate-800/50">{analysisResult.aiReport.emotions}</p>
+                            <div className="bg-slate-950/30 p-5 rounded-xl border border-slate-800/50">
+                              <h4 className="text-[10px] font-black text-indigo-400 uppercase tracking-[0.2em] mb-3">Emotional Subtext</h4>
+                              <p className="text-sm text-slate-300 leading-relaxed italic border-l-2 border-indigo-500 pl-4 py-1">
+                                "{analysisResult.aiReport.emotionalSubtext}"
+                              </p>
                             </div>
-                            <div>
-                              <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-2">Recommended Countermeasures</h4>
-                              <p className="text-sm text-slate-300 bg-slate-950/30 p-4 rounded-xl border border-slate-800/50">{analysisResult.aiReport.countermeasures}</p>
+
+                            <div className="bg-slate-950/30 p-5 rounded-xl border border-emerald-500/20 shadow-[inset_0_0_20px_rgba(16,185,129,0.05)]">
+                              <h4 className="text-[10px] font-black text-emerald-400 uppercase tracking-[0.2em] mb-3">Countermeasures</h4>
+                              <div className="space-y-3">
+                                <div>
+                                  <span className="text-[10px] text-emerald-500/60 uppercase font-bold">Immediate Action</span>
+                                  <p className="text-sm text-slate-200">{analysisResult.aiReport.countermeasures.immediateAction}</p>
+                                </div>
+                                <div>
+                                  <span className="text-[10px] text-emerald-500/60 uppercase font-bold">Long-Term Prevention</span>
+                                  <p className="text-sm text-slate-200">{analysisResult.aiReport.countermeasures.longTermPrevention}</p>
+                                </div>
+                              </div>
                             </div>
+
+                            {analysisResult.aiReport.slangDecoded && (
+                              <div className="md:col-span-2">
+                                <h4 className="text-xs font-bold text-rose-500 uppercase tracking-widest mb-2 flex items-center gap-2">
+                                  <Terminal size={14} /> Slang/Jargon Decoded
+                                </h4>
+                                <p className="text-sm text-rose-200 bg-rose-500/5 p-4 rounded-xl border border-rose-500/20 font-mono italic">
+                                  {analysisResult.aiReport.slangDecoded}
+                                </p>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -2017,6 +2878,417 @@ export default function App() {
                   </div>
                 </>
               )}
+            </motion.div>
+          )}
+
+          {/* Heatmap Tab */}
+          {activeTab === 'heatmap' && (
+            <motion.div 
+              key="heatmap"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="space-y-8"
+            >
+              <GlobalHeatmap />
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <LiveFeed />
+                <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                  <SectionHeader title="Regional Sentiment Breakdown" subtitle="Emotional intensity by geographic region." />
+                  <div className="space-y-6">
+                    {[
+                      { region: 'North America', intensity: 45, emotion: 'Neutral', color: 'bg-indigo-500' },
+                      { region: 'Eastern Europe', intensity: 92, emotion: 'Fear', color: 'bg-orange-500' },
+                      { region: 'East Asia', intensity: 78, emotion: 'Anger', color: 'bg-rose-500' },
+                      { region: 'Western Europe', intensity: 35, emotion: 'Surprise', color: 'bg-amber-500' },
+                    ].map(r => (
+                      <div key={r.region} className="space-y-2">
+                        <div className="flex justify-between items-center">
+                          <span className="text-sm font-bold text-white">{r.region}</span>
+                          <span className="text-xs text-slate-400">{r.emotion} ({r.intensity}%)</span>
+                        </div>
+                        <div className="w-full h-2 bg-slate-950 rounded-full overflow-hidden">
+                          <div className={cn("h-full", r.color)} style={{ width: `${r.intensity}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Alerts Tab */}
+          {activeTab === 'alerts' && (
+            <motion.div 
+              key="alerts"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="max-w-4xl mx-auto space-y-8"
+            >
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8">
+                <SectionHeader title="Automated Alert System" subtitle="Configure thresholds for emotional intensity to trigger automated intelligence alerts." />
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                  {alerts.map(alert => (
+                    <div key={alert.id} className="bg-slate-950 border border-slate-800 rounded-xl p-6 space-y-4 relative group">
+                      <div className="flex justify-between items-start">
+                        <div className="flex items-center gap-3">
+                          <div className={cn(
+                            "p-2 rounded-lg",
+                            alert.type === 'intensity' ? "bg-indigo-600/10 text-indigo-400" :
+                            alert.type === 'keyword' ? "bg-emerald-600/10 text-emerald-400" :
+                            alert.type === 'emotion' ? "bg-rose-600/10 text-rose-400" : "bg-amber-600/10 text-amber-400"
+                          )}>
+                            {alert.type === 'intensity' && <Activity size={20} />}
+                            {alert.type === 'keyword' && <Terminal size={20} />}
+                            {alert.type === 'emotion' && <Ghost size={20} />}
+                            {alert.type === 'threatType' && <Shield size={20} />}
+                          </div>
+                          <div>
+                            <h4 className="font-bold text-white leading-tight">{alert.name}</h4>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-widest mt-0.5">Type: {alert.type}</p>
+                          </div>
+                        </div>
+                        <button 
+                          onClick={() => setAlerts(alerts.map(a => a.id === alert.id ? { ...a, active: !a.active } : a))}
+                          className={cn(
+                            "flex items-center gap-2 px-2 py-1 rounded border transition-all",
+                            alert.active ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-500" : "bg-slate-800 border-slate-700 text-slate-500"
+                          )}
+                        >
+                          <div className={cn("w-1.5 h-1.5 rounded-full animate-pulse", alert.active ? "bg-emerald-500" : "bg-slate-600")} />
+                          <span className="text-[8px] font-black uppercase tracking-widest">{alert.active ? 'Active' : 'Muted'}</span>
+                        </button>
+                      </div>
+                      
+                      <div className="bg-slate-900/50 p-3 rounded-lg border border-slate-800/50">
+                        {alert.type === 'intensity' && (
+                          <div className="space-y-3">
+                            <div className="flex justify-between text-[10px] uppercase font-bold tracking-widest text-slate-500">
+                              <span>{alert.category} Level Threshold</span>
+                              <span className="text-white font-mono">{alert.threshold}</span>
+                            </div>
+                            <input 
+                              type="range" 
+                              min="0" 
+                              max="150" 
+                              value={alert.threshold}
+                              onChange={(e) => setAlerts(alerts.map(a => a.id === alert.id ? { ...a, threshold: parseInt(e.target.value) } : a))}
+                              className="w-full h-1 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-indigo-500"
+                            />
+                          </div>
+                        )}
+                        {alert.type === 'keyword' && (
+                          <div className="space-y-1">
+                            <span className="text-[8px] text-slate-500 uppercase font-black tracking-widest">Match Pattern</span>
+                            <input 
+                              type="text"
+                              value={alert.value}
+                              onChange={(e) => setAlerts(alerts.map(a => a.id === alert.id ? { ...a, value: e.target.value } : a))}
+                              className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-indigo-400 focus:outline-none focus:border-indigo-500 font-mono"
+                            />
+                          </div>
+                        )}
+                        {alert.type === 'emotion' && (
+                          <div className="space-y-2">
+                            <span className="text-[8px] text-slate-500 uppercase font-black tracking-widest">Target Emotion</span>
+                            <select 
+                              value={alert.category}
+                              onChange={(e) => setAlerts(alerts.map(a => a.id === alert.id ? { ...a, category: e.target.value } : a))}
+                              className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-rose-400 focus:outline-none"
+                            >
+                              {EMOTION_RADAR.map(e => <option key={e.subject} value={e.subject}>{e.subject}</option>)}
+                            </select>
+                          </div>
+                        )}
+                        {alert.type === 'threatType' && (
+                          <div className="space-y-2">
+                            <span className="text-[8px] text-slate-500 uppercase font-black tracking-widest">Detected Signature</span>
+                            <input 
+                              type="text"
+                              value={alert.value}
+                              onChange={(e) => setAlerts(alerts.map(a => a.id === alert.id ? { ...a, value: e.target.value } : a))}
+                              className="w-full bg-slate-950 border border-slate-800 rounded px-2 py-1.5 text-xs text-amber-500 focus:outline-none placeholder:text-slate-700"
+                              placeholder="e.g. Ransomware, APT..."
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex justify-between items-center text-[9px]">
+                        <div className="flex items-center gap-1.5 text-slate-500 font-bold uppercase tracking-widest">
+                          <History size={10} />
+                          Triggered: <span className="text-slate-300">{alert.lastTriggered}</span>
+                        </div>
+                        <button 
+                          onClick={() => setAlerts(alerts.filter(a => a.id !== alert.id))}
+                          className="text-slate-600 hover:text-rose-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                          Delete Rule
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  <button 
+                    onClick={handleAddAlert}
+                    className="border-2 border-dashed border-slate-800 rounded-xl p-6 flex flex-col items-center justify-center gap-2 text-slate-500 hover:text-indigo-400 hover:border-indigo-500/50 transition-all"
+                  >
+                    <Zap size={24} />
+                    <span className="text-sm font-bold">Add New Alert Rule</span>
+                  </button>
+                </div>
+
+                <div className="mt-12 space-y-6">
+                  <h3 className="text-sm font-bold text-white uppercase tracking-widest flex items-center gap-2">
+                    <History size={18} className="text-rose-500" />
+                    Recent Alert Log (Last 24h)
+                  </h3>
+                  <div className="space-y-3">
+                    {triggeredAlerts.map(alert => (
+                      <div key={alert.id} className="bg-slate-950/50 border border-slate-800/50 p-4 rounded-xl flex items-center gap-4 hover:bg-slate-950 transition-colors">
+                        <div className={cn(
+                          "w-10 h-10 rounded-lg flex items-center justify-center shrink-0",
+                          alert.type === 'Aggression' ? "bg-rose-500/10 text-rose-500" : "bg-orange-500/10 text-orange-500"
+                        )}>
+                          <AlertTriangle size={20} />
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex justify-between items-start mb-1">
+                            <h4 className="text-xs font-bold text-white uppercase tracking-tighter">Trigger Violation: {alert.type} ({alert.value}%)</h4>
+                            <span className="text-[10px] text-slate-500 font-mono">{alert.timestamp}</span>
+                          </div>
+                          <p className="text-[11px] text-slate-400 italic">"{alert.info}"</p>
+                          <div className="flex items-center gap-2 mt-2">
+                            <span className="text-[9px] px-1.5 py-0.5 bg-slate-800 rounded text-slate-500 uppercase">Source: {alert.source}</span>
+                            <button className="text-[9px] text-indigo-400 hover:underline uppercase">View Full Dataset</button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Collaboration Tab */}
+          {activeTab === 'collaboration' && (
+            <motion.div 
+              key="collaboration"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="max-w-5xl mx-auto space-y-8"
+            >
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 space-y-6">
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                    <SectionHeader title="Shared Intelligence Portal" subtitle="Collaborate with other analysts on threat reports and findings." />
+                    <div className="space-y-6">
+                      {comments.map(post => (
+                        <div key={post.id} className="bg-slate-950 border border-slate-800 rounded-xl p-5 space-y-4">
+                          <div className="flex justify-between items-center">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-xs">{post.avatar}</div>
+                              <div>
+                                <h4 className="text-sm font-bold text-white">{post.author}</h4>
+                                <p className="text-[10px] text-slate-500 uppercase tracking-widest">{post.time}</p>
+                              </div>
+                            </div>
+                            <button className="text-slate-500 hover:text-white transition-colors"><Share2 size={16} /></button>
+                          </div>
+                          <p className="text-sm text-slate-300 leading-relaxed">{post.content}</p>
+                          <div className="flex items-center gap-6 pt-2">
+                            <button className="flex items-center gap-2 text-xs text-slate-500 hover:text-indigo-400 transition-colors">
+                              <ThumbsUp size={14} /> {post.upvotes}
+                            </button>
+                            <button className="flex items-center gap-2 text-xs text-slate-500 hover:text-indigo-400 transition-colors">
+                              <MessageCircle size={14} /> {post.comments}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-6">
+                      <textarea 
+                        value={newComment}
+                        onChange={(e) => setNewComment(e.target.value)}
+                        placeholder="Share a new finding or insight..."
+                        className="w-full h-24 bg-slate-950 border border-slate-800 rounded-xl p-4 text-sm text-white focus:outline-none focus:ring-1 focus:ring-indigo-500 resize-none"
+                      />
+                      <div className="flex justify-end mt-2">
+                        <button 
+                          onClick={handleAddComment}
+                          className="px-6 py-2 bg-indigo-600 hover:bg-white text-white hover:text-indigo-600 rounded-lg text-xs font-bold transition-all"
+                        >
+                          Post Insight
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="space-y-6">
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                    <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                      <TrendingUp size={18} className="text-indigo-500" />
+                      Trending Intelligence
+                    </h3>
+                    <div className="space-y-3">
+                      {trendingTopics.map(t => (
+                        <div key={t.topic} className="p-3 bg-slate-950 rounded-xl border border-slate-800 flex justify-between items-center group hover:border-indigo-500/30 transition-all cursor-pointer">
+                          <div>
+                            <p className="text-xs font-bold text-white group-hover:text-indigo-400">{t.topic}</p>
+                            <span className="text-[10px] text-slate-500 uppercase tracking-widest">{t.volume} Volume</span>
+                          </div>
+                          <span className={cn(
+                            "text-[10px] px-2 py-0.5 rounded-full font-bold uppercase",
+                            t.sentiment === 'Negative' ? "bg-rose-500/10 text-rose-500" : 
+                            t.sentiment === 'Aggressive' ? "bg-orange-500/10 text-orange-500" : "bg-slate-800 text-slate-400"
+                          )}>
+                            {t.sentiment}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6">
+                    <h3 className="text-sm font-bold text-white mb-4 flex items-center gap-2">
+                      <Users size={18} className="text-indigo-500" />
+                      Active Analysts
+                    </h3>
+                    {/* analysts list ... */}
+                    <div className="space-y-4">
+                      {[
+                        { name: 'Analyst_Alpha', status: 'Online', role: 'Senior Auditor', location: 'UK' },
+                        { name: 'CTI_Expert', status: 'Online', role: 'Threat Hunter', location: 'USA' },
+                        { name: 'Cyber_Sentinel', status: 'Away', role: 'Security Analyst', location: 'GER' },
+                      ].map(a => (
+                        <div key={a.name} className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className={cn("w-2 h-2 rounded-full", a.status === 'Online' ? "bg-emerald-500" : "bg-slate-700")} />
+                            <div>
+                              <p className="text-xs font-bold text-white">{a.name} <span className="text-[8px] text-slate-600 ml-1">[{a.location}]</span></p>
+                              <p className="text-[10px] text-slate-500">{a.role}</p>
+                            </div>
+                          </div>
+                          <button className="p-1.5 bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors">
+                            <MessageSquare size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
+
+          {/* Dark Web Tab */}
+          {activeTab === 'darkweb' && (
+            <motion.div 
+              key="darkweb"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="max-w-5xl mx-auto space-y-8"
+            >
+              <div className="bg-slate-900 border-2 border-rose-500/20 rounded-2xl p-8 relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-4">
+                  <div className="flex items-center gap-2 px-3 py-1 bg-rose-500/10 border border-rose-500/20 rounded-full">
+                    <Terminal size={12} className="text-rose-500" />
+                    <span className="text-[10px] font-bold text-rose-500 uppercase tracking-widest">Encrypted Session</span>
+                  </div>
+                </div>
+                
+                <SectionHeader title="Dark Web Forum Simulator" subtitle="Analyze underground communications with specialized slang recognition." />
+                
+                <div className="mb-6 flex gap-3">
+                  {['Russian Ransomware Forum', 'Turkish Market Leak', 'General Underground', 'Hacker Recruitment Board'].map(ctx => (
+                    <button
+                      key={ctx}
+                      onClick={() => setForumContext(ctx)}
+                      className={cn(
+                        "px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition-all",
+                        forumContext === ctx ? "bg-rose-600 text-white" : "bg-slate-800 text-slate-500 hover:bg-slate-700"
+                      )}
+                    >
+                      {ctx}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                  <div className="lg:col-span-2 space-y-6">
+                    <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 font-mono text-xs text-emerald-500 space-y-1">
+                      <p className="opacity-50 text-[9px]"># ID: DW-SIM-RX-402</p>
+                      <p className="opacity-50 text-[9px]"># CONTEXT: {forumContext}</p>
+                      <p className="opacity-50"># Initializing slang-aware NLP engine...</p>
+                      <p className="opacity-50"># Loading underground lexicon (v2.4)...</p>
+                      <p># Ready for analysis.</p>
+                    </div>
+                    
+                    <textarea 
+                      value={analysisText}
+                      onChange={(e) => setAnalysisText(e.target.value)}
+                      placeholder="Paste dark web forum post here..."
+                      className="w-full h-48 bg-slate-950 border border-rose-500/20 rounded-xl p-4 text-sm text-slate-300 focus:outline-none focus:ring-1 focus:ring-rose-500/50 font-mono"
+                    />
+                    
+                    <div className="flex justify-between items-center">
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={() => setAnalysisText('Selling fresh logs from major US bank. 10k+ records. No lowballers. Escrow only.')}
+                          className="text-[10px] px-2 py-1 bg-slate-800 rounded hover:bg-slate-700 text-slate-400"
+                        >
+                          Sample: Market
+                        </button>
+                        <button 
+                          onClick={() => setAnalysisText('Need a reliable FUD crypter for my latest payload. Willing to pay top dollar.')}
+                          className="text-[10px] px-2 py-1 bg-slate-800 rounded hover:bg-slate-700 text-slate-400"
+                        >
+                          Sample: Tooling
+                        </button>
+                      </div>
+                      <button 
+                        onClick={handleAnalyze}
+                        disabled={isAnalyzing || !analysisText}
+                        className="px-8 py-3 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold transition-all shadow-lg shadow-rose-600/20 flex items-center gap-2 disabled:opacity-50"
+                      >
+                        {isAnalyzing ? (
+                          <Loader2 size={18} className="animate-spin" />
+                        ) : (
+                          <Skull size={18} />
+                        )}
+                        Analyze Underground Intel
+                      </button>
+                    </div>
+                  </div>
+                  
+                  <div className="space-y-6">
+                    <div className="bg-slate-950 border border-slate-800 rounded-xl p-6">
+                      <h3 className="text-xs font-bold text-rose-500 uppercase tracking-widest mb-4">Slang Recognition (δ-Underground)</h3>
+                      <div className="space-y-3">
+                        {[
+                          { term: 'FUD', meaning: 'Fully Undetectable' },
+                          { term: 'Logs', meaning: 'Stolen credentials/data' },
+                          { term: 'Crypter', meaning: 'Tool to hide malware' },
+                          { term: 'Escrow', meaning: 'Trusted third-party payment' },
+                          { term: 'Payload', meaning: 'Malicious part of malware' },
+                        ].map(s => (
+                          <div key={s.term} className="flex justify-between items-center p-2 bg-slate-900 rounded border border-slate-800">
+                            <span className="text-xs font-bold text-white font-mono">{s.term}</span>
+                            <span className="text-[10px] text-slate-500">{s.meaning}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </motion.div>
           )}
         </AnimatePresence>
