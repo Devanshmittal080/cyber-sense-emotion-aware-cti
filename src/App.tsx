@@ -1003,12 +1003,68 @@ export default function App() {
     }
   };
 
-  // Process sample tweets through the paper's NLP logic
-  const processedTweets = useMemo(() => {
+  // Process sample tweets through the NLP logic (falls back to local logic if AI takes time or is unavailable)
+  const [processedTweets, setProcessedTweets] = useState<any[]>(() => {
     return SAMPLE_TWEETS.map(t => ({
       text: t,
       ...analyzeTweet(t)
     }));
+  });
+
+  useEffect(() => {
+    const fetchRealAIsentiment = async () => {
+      if (!process.env.GEMINI_API_KEY) return;
+      
+      try {
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const response = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: `You are an expert NLP sentiment analysis model. Analyze the following texts and provide exact statistical NLP metrics.
+          For each text, provide:
+          - polarity: float between -1.0 (highly negative) and 1.0 (highly positive)
+          - subjectivity: float between 0.0 (very objective) and 1.0 (very subjective)
+          - sentiment: strictly "Positive", "Neutral", or "Negative"
+          - isCyberRelevant: boolean indicating if it's related to cybersecurity threats/events
+          - frequentMarkers: array of up to 3 important contextual keywords (strings)
+          
+          Texts to analyze:
+          ${JSON.stringify(SAMPLE_TWEETS)}
+          `,
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  polarity: { type: Type.NUMBER },
+                  subjectivity: { type: Type.NUMBER },
+                  sentiment: { type: Type.STRING },
+                  isCyberRelevant: { type: Type.BOOLEAN },
+                  frequentMarkers: { type: Type.ARRAY, items: { type: Type.STRING } }
+                },
+                required: ["polarity", "subjectivity", "sentiment", "isCyberRelevant", "frequentMarkers"]
+              }
+            }
+          }
+        });
+
+        if (response.text) {
+          const aiResults = JSON.parse(response.text);
+          if (Array.isArray(aiResults) && aiResults.length === SAMPLE_TWEETS.length) {
+            // Combine AI stats with original texts to update dashboard
+            setProcessedTweets(SAMPLE_TWEETS.map((text, i) => ({
+              text,
+              ...aiResults[i]
+            })));
+          }
+        }
+      } catch (error) {
+        console.error("Bulk AI NLP Analysis Error:", error);
+      }
+    };
+
+    fetchRealAIsentiment();
   }, []);
 
   const stats = useMemo(() => {
@@ -1058,7 +1114,81 @@ export default function App() {
         }
       }
 
-      const result = analyzeTweet(textToAnalyze);
+      // AI-Powered Intelligence Report & NLP Sentiment Analysis
+      let aiReport = null;
+      let realNLPResult = null;
+      if (process.env.GEMINI_API_KEY) {
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const response = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: `Analyze this threat actor communication based on CTI principles, NLP sentiment, and underground forum slang: "${textToAnalyze}". 
+          Provide a highly granular structured report in JSON format with two main sections:
+          1. nlpMetrics: Deep NLP analysis including polarity (-1 to 1), subjectivity (0 to 1), dominant sentiment ("Positive", "Neutral", "Negative"), cyberRelevance (boolean), and key cyber markers (array of strings).
+          2. intelligenceReport: Specifically containing threatActorProfile (sophistication, motivation, potentialAffiliation), emotionalSubtext (string), strategicIntent (shortTermGoal, longTermObjective), countermeasures (immediateAction, longTermPrevention), and slangDecoded.`,
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                nlpMetrics: {
+                  type: Type.OBJECT,
+                  properties: {
+                    polarity: { type: Type.NUMBER },
+                    subjectivity: { type: Type.NUMBER },
+                    sentiment: { type: Type.STRING },
+                    isCyberRelevant: { type: Type.BOOLEAN },
+                    frequentMarkers: { type: Type.ARRAY, items: { type: Type.STRING } }
+                  },
+                  required: ["polarity", "subjectivity", "sentiment", "isCyberRelevant", "frequentMarkers"]
+                },
+                intelligenceReport: {
+                  type: Type.OBJECT,
+                  properties: {
+                    threatActorProfile: {
+                      type: Type.OBJECT,
+                      properties: {
+                        sophistication: { type: Type.STRING },
+                        motivation: { type: Type.STRING },
+                        potentialAffiliation: { type: Type.STRING }
+                      },
+                      required: ["sophistication", "motivation"]
+                    },
+                    emotionalSubtext: { type: Type.STRING },
+                    strategicIntent: {
+                      type: Type.OBJECT,
+                      properties: {
+                        shortTermGoal: { type: Type.STRING },
+                        longTermObjective: { type: Type.STRING }
+                      },
+                      required: ["shortTermGoal", "longTermObjective"]
+                    },
+                    countermeasures: {
+                      type: Type.OBJECT,
+                      properties: {
+                        immediateAction: { type: Type.STRING },
+                        longTermPrevention: { type: Type.STRING }
+                      },
+                      required: ["immediateAction", "longTermPrevention"]
+                    },
+                    slangDecoded: { type: Type.STRING }
+                  },
+                  required: ["threatActorProfile", "emotionalSubtext", "strategicIntent", "countermeasures"]
+                }
+              },
+              required: ["nlpMetrics", "intelligenceReport"]
+            }
+          }
+        });
+        
+        if (response.text) {
+          const parsed = JSON.parse(response.text);
+          realNLPResult = parsed.nlpMetrics;
+          aiReport = parsed.intelligenceReport;
+        }
+      }
+
+      // Use real AI NLP if available, otherwise fallback to lexicon
+      const result = realNLPResult || analyzeTweet(textToAnalyze);
       
       // Determine insights based on paper's findings
       let insights = {
@@ -1074,62 +1204,6 @@ export default function App() {
         if (result.subjectivity > 0.6 && e.subject === 'Disgust') weight += 0.2;
         return { ...e, A: Math.min(150, Math.floor(e.A * weight)) };
       });
-
-      // AI-Powered Intelligence Report with Slang Recognition
-      let aiReport = null;
-      if (process.env.GEMINI_API_KEY) {
-        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-        const response = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: `Analyze this threat actor communication based on CTI principles and underground forum slang: "${textToAnalyze}". 
-          Provide a highly granular structured report in JSON format with exactly these fields:
-          1. threatActorProfile: (include sophistication, motivation, and potentialAffiliation as sub-fields)
-          2. emotionalSubtext: (string analysis of hidden aggression or fear)
-          3. strategicIntent: (include shortTermGoal and longTermObjective as sub-fields)
-          4. countermeasures: (include immediateAction and longTermPrevention as sub-fields)
-          5. slangDecoded: (decode any underground slang if present)`,
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                threatActorProfile: {
-                  type: Type.OBJECT,
-                  properties: {
-                    sophistication: { type: Type.STRING },
-                    motivation: { type: Type.STRING },
-                    potentialAffiliation: { type: Type.STRING }
-                  },
-                  required: ["sophistication", "motivation"]
-                },
-                emotionalSubtext: { type: Type.STRING },
-                strategicIntent: {
-                  type: Type.OBJECT,
-                  properties: {
-                    shortTermGoal: { type: Type.STRING },
-                    longTermObjective: { type: Type.STRING }
-                  },
-                  required: ["shortTermGoal", "longTermObjective"]
-                },
-                countermeasures: {
-                  type: Type.OBJECT,
-                  properties: {
-                    immediateAction: { type: Type.STRING },
-                    longTermPrevention: { type: Type.STRING }
-                  },
-                  required: ["immediateAction", "longTermPrevention"]
-                },
-                slangDecoded: { type: Type.STRING }
-              },
-              required: ["threatActorProfile", "emotionalSubtext", "strategicIntent", "countermeasures"]
-            }
-          }
-        });
-        
-        if (response.text) {
-          aiReport = JSON.parse(response.text);
-        }
-      }
 
       // Calculate high-level metrics for alert evaluation
       const dominantEmotion = [...dynamicEmotions].sort((a, b) => b.A - a.A)[0].subject;
@@ -1724,8 +1798,8 @@ ${analysisResult.aiReport.countermeasures}
             </h2>
             <p className="text-slate-400">Monitoring global cyber threat emotions and sentiment patterns.</p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="relative">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="relative flex-grow md:flex-grow-0">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" size={18} />
               <input 
                 type="text" 
@@ -1733,9 +1807,36 @@ ${analysisResult.aiReport.countermeasures}
                 className="bg-slate-900 border border-slate-800 rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/50 w-full md:w-64"
               />
             </div>
-            <button className="bg-slate-900 border border-slate-800 p-2 rounded-lg text-slate-400 hover:text-slate-200 transition-colors">
+            <button className="hidden md:flex bg-slate-900 border border-slate-800 p-2 rounded-lg text-slate-400 hover:text-slate-200 transition-colors">
               <Globe size={20} />
             </button>
+            <div className="h-6 w-px bg-slate-800 hidden md:block mx-1"></div>
+            {user ? (
+               <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-lg pr-2 pl-1 py-1">
+                 {user.photoURL ? (
+                   <img src={user.photoURL} alt="User" className="w-6 h-6 rounded-md" />
+                 ) : (
+                   <div className="w-6 h-6 rounded-md bg-indigo-500 flex items-center justify-center text-[10px] font-bold text-white">
+                     {user.displayName?.charAt(0) || 'U'}
+                   </div>
+                 )}
+                 <span className="text-xs font-semibold text-slate-300 hidden md:block mx-1">{user.displayName || 'Analyst'}</span>
+                 <button 
+                   onClick={handleLogout}
+                   title="Sign Out"
+                   className="p-1 text-slate-500 hover:text-rose-500 hover:bg-slate-800 rounded transition-colors"
+                 >
+                   <LogOut size={14} />
+                 </button>
+               </div>
+            ) : (
+               <button 
+                 onClick={() => setShowLogin(true)}
+                 className="text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg transition-colors"
+               >
+                 Sign In
+               </button>
+            )}
           </div>
         </header>
 
