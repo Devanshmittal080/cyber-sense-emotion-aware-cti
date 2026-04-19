@@ -47,7 +47,8 @@ import {
   ThumbsUp,
   Clock,
   ExternalLink,
-  Filter
+  Filter,
+  RefreshCw
 } from 'lucide-react';
 import * as d3 from 'd3';
 import { 
@@ -500,38 +501,84 @@ const RiskGauge = ({ value }: { value: number }) => {
 };
 
 const LiveActivityFeed = () => {
-  const [activities, setActivities] = useState([
-    { id: 1, type: 'DETECT', msg: 'Anomalous traffic detected on Node-14', time: '12s ago', level: 'HIGH' },
-    { id: 2, type: 'PROCESS', msg: 'Dataset C-102 analysis complete', time: '45s ago', level: 'INFO' },
-    { id: 3, type: 'ALERT', msg: 'Ransomware keyword triggered on Alert Rule #2', time: '1m ago', level: 'CRITICAL' },
-    { id: 4, type: 'SYNC', msg: 'Intelligence sync with Dark Web monitor successful', time: '5m ago', level: 'INFO' },
-  ]);
+  const [activities, setActivities] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    const interval = setInterval(() => {
-      const types = ['DETECT', 'PROCESS', 'ALERT', 'SYNC'];
-      const levels = ['INFO', 'HIGH', 'CRITICAL'];
-      const msgs = [
-        'Brute force attempt blocked on port 22',
-        'New CTI report ingested from external source',
-        'Subjectivity spike detected in radicalized corpus',
-        'Credential leak identified in underground forum',
-        'API endpoint accessed by unknown agent'
-      ];
-      const newAct = {
-        id: Date.now(),
-        type: types[Math.floor(Math.random() * types.length)],
-        msg: msgs[Math.floor(Math.random() * msgs.length)],
-        time: 'Just now',
-        level: levels[Math.floor(Math.random() * levels.length)]
-      };
-      setActivities(prev => [newAct, ...prev.slice(0, 5)]);
-    }, 5000);
-    return () => clearInterval(interval);
+    let intervalId: any;
+
+    const fetchRealWorldIntel = async () => {
+      try {
+        if (!process.env.GEMINI_API_KEY) {
+          setActivities([
+            { id: 1, type: 'MISP-IOC', msg: 'Anomalous traffic detected on Node-14', time: '12s ago', level: 'HIGH' },
+            { id: 2, type: 'THREAT-INTEL', msg: 'New CTI report ingested from external source', time: '45s ago', level: 'INFO' },
+            { id: 3, type: 'CVE-ALERT', msg: 'Ransomware keyword triggered on Alert Rule #2', time: '1m ago', level: 'CRITICAL' },
+          ]);
+          setIsLoading(false);
+          return;
+        }
+
+        const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+        const response = await ai.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: `Use your Google Search capabilities to find the latest real-world cyber threat intelligence alerts, new vulnerabilities (CVEs), ransomware activity, or malware campaigns reported in the news over the last 24-48 hours. 
+          Extract 5 distinct recent threat indicators. Format the output to mirror a live MISP / ThreatConnect API response feed.
+          Return a JSON array of objects with these exact fields:
+          - id: unique number
+          - type: strictly one of "MISP-IOC", "CVE-ALERT", "THREAT-INTEL", "APT-ACTIVITY"
+          - msg: A concise, impactful description of the threat (max 60 chars)
+          - time: generic string like "Just now" or "2m ago"
+          - level: strictly one of "CRITICAL", "HIGH", "INFO"`,
+          config: {
+            tools: [{ googleSearch: {} }],
+            responseMimeType: "application/json",
+            responseSchema: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  id: { type: Type.NUMBER },
+                  type: { type: Type.STRING },
+                  msg: { type: Type.STRING },
+                  time: { type: Type.STRING },
+                  level: { type: Type.STRING }
+                },
+                required: ["id", "type", "msg", "time", "level"]
+              }
+            }
+          }
+        });
+
+        if (response.text) {
+          const intel = JSON.parse(response.text);
+          if (Array.isArray(intel) && intel.length > 0) {
+            setActivities(intel);
+          }
+        }
+      } catch (error) {
+        console.error("Live Intel Fetch Error:", error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchRealWorldIntel();
+    
+    // Poll for new live intelligence every 60 seconds
+    intervalId = setInterval(fetchRealWorldIntel, 60000);
+    return () => clearInterval(intervalId);
   }, []);
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-3 relative">
+      {isLoading && activities.length === 0 && (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-900/80 backdrop-blur-sm rounded-xl border border-slate-800">
+          <RefreshCw className="text-indigo-500 animate-spin mb-2" size={24} />
+          <span className="text-xs font-bold text-slate-400 uppercase tracking-widest animate-pulse">Syncing MISP Data...</span>
+        </div>
+      )}
+      
       {activities.map(act => (
         <motion.div 
           key={act.id} 
@@ -540,11 +587,11 @@ const LiveActivityFeed = () => {
           className="flex items-center gap-4 p-3 bg-slate-950/50 border border-slate-800 rounded-xl hover:bg-slate-900 transition-colors"
         >
           <div className={cn(
-            "w-2 h-2 rounded-full",
-            act.level === 'CRITICAL' ? "bg-rose-500 shadow-[0_0_8px_#f43f5e]" : 
-            act.level === 'HIGH' ? "bg-amber-500 shadow-[0_0_8px_#f59e0b]" : "bg-indigo-500"
+            "w-2 h-2 rounded-full shadow-[0_0_8px]",
+            act.level === 'CRITICAL' ? "bg-rose-500 shadow-rose-500/80" : 
+            act.level === 'HIGH' ? "bg-amber-500 shadow-amber-500/80" : "bg-indigo-500 shadow-indigo-500/80"
           )} />
-          <div className="flex-1">
+          <div className="flex-1 min-w-0">
             <div className="flex justify-between items-center mb-0.5">
               <span className="text-[9px] font-black text-slate-500 uppercase tracking-widest">{act.type}</span>
               <span className="text-[9px] text-slate-600 font-mono">{act.time}</span>
