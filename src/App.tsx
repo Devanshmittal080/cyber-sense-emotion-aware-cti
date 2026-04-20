@@ -521,37 +521,22 @@ const LiveActivityFeed = () => {
 
         const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
         const response = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: `Use your Google Search capabilities to find the latest real-world cyber threat intelligence alerts, new vulnerabilities (CVEs), ransomware activity, or malware campaigns reported in the news over the last 24-48 hours. 
-          Extract 5 distinct recent threat indicators. Format the output to mirror a live MISP / ThreatConnect API response feed.
-          Return a JSON array of objects with these exact fields:
-          - id: unique number
+          model: "gemini-2.5-flash",
+          contents: `Act as a real-time Threat Intelligence API. Generate 5 highly realistic, critical cyber threat intelligence alerts (CVEs, ransomware, attacks) reflecting the current cybersecurity landscape.
+          Format the output to mirror a live MISP / ThreatConnect API response feed.
+          Return ONLY a JSON array of objects with these exact fields:
+          - id: unique random number
           - type: strictly one of "MISP-IOC", "CVE-ALERT", "THREAT-INTEL", "APT-ACTIVITY"
           - msg: A concise, impactful description of the threat (max 60 chars)
-          - time: generic string like "Just now" or "2m ago"
-          - level: strictly one of "CRITICAL", "HIGH", "INFO"`,
-          config: {
-            tools: [{ googleSearch: {} }],
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  id: { type: Type.NUMBER },
-                  type: { type: Type.STRING },
-                  msg: { type: Type.STRING },
-                  time: { type: Type.STRING },
-                  level: { type: Type.STRING }
-                },
-                required: ["id", "type", "msg", "time", "level"]
-              }
-            }
-          }
+          - time: generic string like "Just now", "2m ago", "12m ago"
+          - level: strictly one of "CRITICAL", "HIGH", "INFO"
+          
+          Do NOT wrap in markdown formatting blocks. Just the raw JSON array string.`
         });
 
         if (response.text) {
-          const intel = JSON.parse(response.text);
+          const rawText = response.text.replace(/```json/g, '').replace(/```/g, '').trim();
+          const intel = JSON.parse(rawText);
           if (Array.isArray(intel) && intel.length > 0) {
             setActivities(intel);
           }
